@@ -1,8 +1,7 @@
 package com.pfe.sageline.entity;
+
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
@@ -11,26 +10,28 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AnomalyDetection {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "anomaly_score", nullable = false)
-    private Double anomalyScore;
+    private Long validationId;
 
-    @Column(nullable = false)
-    private String severity;
+    @Enumerated(EnumType.STRING)
+    private AnomalyType anomalyType;
 
-    @Column(columnDefinition = "TEXT")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "severity")
+    private Severity severity;
+
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "detected_at", nullable = false)
+    @Column(name = "detected_at")
     private LocalDateTime detectedAt;
 
     @PrePersist
     protected void onCreate() {
-        if (detectedAt == null) {
-            detectedAt = LocalDateTime.now();
-        }
+        this.detectedAt = LocalDateTime.now();
     }
 }
