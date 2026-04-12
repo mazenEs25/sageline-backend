@@ -1,17 +1,22 @@
 package com.pfe.sageline.service;
 
+import com.pfe.sageline.Config.SecurityUtils;
 import com.pfe.sageline.dtos.ValidationRequestDTO;
 import com.pfe.sageline.dtos.ValidationResponseDTO;
 import com.pfe.sageline.entity.NonConformityPrediction;
+import com.pfe.sageline.entity.Role;
+import com.pfe.sageline.entity.User;
 import com.pfe.sageline.entity.Validation;
 import com.pfe.sageline.entity.ValidationZone;
 import com.pfe.sageline.entity.ValidationStatus;
 import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.mappers.ValidationMapper;
+import com.pfe.sageline.repository.UserRepository;
 import com.pfe.sageline.repository.ValidationRepository;
 import com.pfe.sageline.repository.ValidationZoneRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +35,21 @@ public class ValidationService {
     private final ValidationMapper validationMapper;
     private final KPIService kpiService;
     private final AIPredictionService aiPredictionService;  // ← NOUVEAU
+    @Autowired
+    private MessagingEventService messagingEventService;
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private SecurityUtils securityUtils;
+
+    /**
+     * Récupère l'utilisateur actuellement authentifié (depuis le JWT Keycloak).
+     */
+    private User getCurrentUser() {
+        String username = securityUtils.getCurrentUsername();
+        if (username == null) return null;
+        return userRepository.findByUsername(username).orElse(null);
+    }
 
     /**
      * Lancer une nouvelle validation avec prédiction IA
@@ -57,6 +77,22 @@ public class ValidationService {
                     savedValidation.getId(), prediction.getRiskScore(), prediction.getRiskLevel());
         } catch (Exception e) {
             log.warn("Could not get initial AI prediction: {}", e.getMessage());
+        }
+
+        // ✅ DÉCLENCHER LES ÉVÉNEMENTS DE MESSAGERIE / NOTIFICATION
+        try {
+            User creator = getCurrentUser();
+            Long lineId = savedValidation.getValidationZone().getProductionLine().getId();
+            List<User> techsOnLine = userRepository.findByProductionLineId(lineId);
+
+            for (User tech : techsOnLine) {
+                if (tech.getRole() == Role.TECH_VAL || tech.getRole() == Role.TECH_PREP) {
+                    User effectiveCreator = creator != null ? creator : tech;
+                    messagingEventService.onValidationCreated(savedValidation, tech, effectiveCreator);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not trigger validation created event: {}", e.getMessage());
         }
 
         return validationMapper.toResponseDTO(savedValidation);

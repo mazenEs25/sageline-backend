@@ -4,6 +4,10 @@ package com.pfe.sageline.controller;
 import com.pfe.sageline.Config.SecurityUtils;
 import com.pfe.sageline.dtos.UserRequestDTO;
 import com.pfe.sageline.dtos.UserResponseDTO;
+import com.pfe.sageline.entity.User;
+import com.pfe.sageline.exception.ResourceNotFoundException;
+import com.pfe.sageline.mappers.UserMapper;
+import com.pfe.sageline.repository.UserRepository;
 import com.pfe.sageline.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +30,8 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final UserRepository userRepository;
+    private final UserMapper userMapper;
     @Autowired
     private SecurityUtils securityUtils;
 
@@ -103,11 +109,11 @@ public class UserController {
         return ResponseEntity.ok(exists);
     }
     @GetMapping("/me")
-    public Map<String, Object> getCurrentUser() {
-        return Map.of(
-                "username", securityUtils.getCurrentUsername(),
-                "email", securityUtils.getCurrentEmail(),
-                "roles", securityUtils.getCurrentRoles()
-        );
+    public ResponseEntity<UserResponseDTO> getCurrentUser() {
+        String username = securityUtils.getCurrentUsername();
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "username", username));
+        return ResponseEntity.ok(userMapper.toResponseDTO(user));
     }
+
 }

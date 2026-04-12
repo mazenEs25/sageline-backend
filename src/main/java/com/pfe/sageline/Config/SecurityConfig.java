@@ -42,6 +42,12 @@ public class SecurityConfig {
 
                 // URL-based authorization
                 .authorizeHttpRequests(auth -> auth
+                        // WebSocket endpoint
+                        .requestMatchers("/ws/**").permitAll()
+
+                        // API Messagerie
+                        .requestMatchers("/api/messages/**").authenticated()
+                        .requestMatchers("/api/notifications/**").authenticated()
                         // Public endpoints
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()

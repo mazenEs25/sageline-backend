@@ -1,5 +1,6 @@
 package com.pfe.sageline.service;
 
+import com.pfe.sageline.Config.SecurityUtils;
 import com.pfe.sageline.dtos.UserRequestDTO;
 import com.pfe.sageline.dtos.UserResponseDTO;
 import com.pfe.sageline.entity.ProductionLine;
@@ -10,6 +11,7 @@ import com.pfe.sageline.exception.ValidationException;
 import com.pfe.sageline.mappers.UserMapper;
 import com.pfe.sageline.repository.ProductionLineRepository;
 import com.pfe.sageline.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +26,10 @@ public class UserService {
     private final ProductionLineRepository lineRepository;
     private final UserMapper userMapper;
     private final KeycloakUserService keycloakUserService;
+    @Autowired
+    private MessagingEventService messagingEventService;
+    @Autowired
+    private SecurityUtils securityUtils;
 
     public UserService(UserRepository userRepository,
                        ProductionLineRepository lineRepository,
@@ -33,6 +39,16 @@ public class UserService {
         this.lineRepository = lineRepository;
         this.userMapper = userMapper;
         this.keycloakUserService = keycloakUserService;
+    }
+
+    /**
+     * Récupère l'utilisateur actuellement authentifié (depuis le JWT Keycloak).
+     * Retourne null si aucun utilisateur n'est authentifié ou introuvable en base.
+     */
+    private User getCurrentUser() {
+        String username = securityUtils.getCurrentUsername();
+        if (username == null) return null;
+        return userRepository.findByUsername(username).orElse(null);
     }
 
     // ─── CREATE (Keycloak + DB) ───
@@ -80,6 +96,18 @@ public class UserService {
         }
 
         User saved = userRepository.save(user);
+
+        // Si une ligne a été assignée à la création → déclencher l'événement
+        if (saved.getProductionLine() != null) {
+            try {
+                User currentUser = getCurrentUser();
+                if (currentUser == null) currentUser = saved; // fallback (système)
+                messagingEventService.onLineAssignment(saved, saved.getProductionLine(), currentUser);
+            } catch (Exception e) {
+                System.err.println("WARNING: Failed to trigger line assignment event: " + e.getMessage());
+            }
+        }
+
         return userMapper.toResponseDTO(saved);
     }
 
@@ -91,6 +119,8 @@ public class UserService {
         String oldUsername = user.getUsername();
         Role oldRole = user.getRole();
         String oldEmail = user.getEmail();
+        Long oldLineId = user.getProductionLine() != null
+                ? user.getProductionLine().getId() : null;
 
         // Update database fields
         if (request.getEmail() != null) {
@@ -125,6 +155,21 @@ public class UserService {
         }
 
         User saved = userRepository.save(user);
+
+        // Si la ligne a changé → déclencher l'événement de messagerie
+        Long newLineId = saved.getProductionLine() != null
+                ? saved.getProductionLine().getId() : null;
+
+        if (newLineId != null && !newLineId.equals(oldLineId)) {
+            try {
+                User currentUser = getCurrentUser();
+                if (currentUser == null) currentUser = saved; // fallback (système)
+                messagingEventService.onLineAssignment(saved, saved.getProductionLine(), currentUser);
+            } catch (Exception e) {
+                System.err.println("WARNING: Failed to trigger line assignment event: " + e.getMessage());
+            }
+        }
+
         return userMapper.toResponseDTO(saved);
     }
 
