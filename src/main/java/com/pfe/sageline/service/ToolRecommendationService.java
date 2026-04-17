@@ -1,7 +1,7 @@
 package com.pfe.sageline.service;
 
 import com.pfe.sageline.dtos.ToolScoreDTO;
-import com.pfe.sageline.entity.ToolStatus;
+import com.pfe.sageline.enums.ToolStatus;
 import com.pfe.sageline.entity.ToolRecommendation;
 import com.pfe.sageline.repository.ToolRecommendationRepository;
 import org.springframework.stereotype.Service;

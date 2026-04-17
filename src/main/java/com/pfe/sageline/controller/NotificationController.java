@@ -1,6 +1,6 @@
 package com.pfe.sageline.controller;
 
-import com.pfe.sageline.dtos.NotificationResponseDTO;
+import com.pfe.sageline.dtos.response.NotificationResponseDTO;
 import com.pfe.sageline.service.NotificationService;
 import lombok.*;
 import org.springframework.http.ResponseEntity;

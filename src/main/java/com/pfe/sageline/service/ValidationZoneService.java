@@ -1,8 +1,8 @@
 package com.pfe.sageline.service;
 
 
-import com.pfe.sageline.dtos.ValidationZoneRequestDTO;
-import com.pfe.sageline.dtos.ValidationZoneResponseDTO;
+import com.pfe.sageline.dtos.request.ValidationZoneRequestDTO;
+import com.pfe.sageline.dtos.response.ValidationZoneResponseDTO;
 import com.pfe.sageline.entity.ProductionLine;
 import com.pfe.sageline.entity.ValidationZone;
 import com.pfe.sageline.mappers.ValidationZoneMapper;

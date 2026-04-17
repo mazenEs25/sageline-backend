@@ -1,7 +1,7 @@
 package com.pfe.sageline.controller;
 
 
-import com.pfe.sageline.dtos.KPIResponse;
+import com.pfe.sageline.dtos.response.KPIResponse;
 import com.pfe.sageline.service.KPIService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

@@ -1,16 +1,19 @@
 package com.pfe.sageline.service;
 
 import com.pfe.sageline.Config.SecurityUtils;
-import com.pfe.sageline.dtos.UserRequestDTO;
-import com.pfe.sageline.dtos.UserResponseDTO;
+import com.pfe.sageline.dtos.request.UserRequestDTO;
+import com.pfe.sageline.dtos.response.UserResponseDTO;
 import com.pfe.sageline.entity.ProductionLine;
+import com.pfe.sageline.entity.Secteur;
 import com.pfe.sageline.entity.User;
-import com.pfe.sageline.entity.Role;
+import com.pfe.sageline.enums.Role;
 import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.exception.ValidationException;
 import com.pfe.sageline.mappers.UserMapper;
 import com.pfe.sageline.repository.ProductionLineRepository;
+import com.pfe.sageline.repository.SecteurRepository;
 import com.pfe.sageline.repository.UserRepository;
+import lombok.AllArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +29,8 @@ public class UserService {
     private final ProductionLineRepository lineRepository;
     private final UserMapper userMapper;
     private final KeycloakUserService keycloakUserService;
+    private final SecteurRepository secteurRepository;
+
     @Autowired
     private MessagingEventService messagingEventService;
     @Autowired
@@ -34,11 +39,13 @@ public class UserService {
     public UserService(UserRepository userRepository,
                        ProductionLineRepository lineRepository,
                        UserMapper userMapper,
-                       KeycloakUserService keycloakUserService) {
+                       KeycloakUserService keycloakUserService,
+                       SecteurRepository secteurRepository) {
         this.userRepository = userRepository;
         this.lineRepository = lineRepository;
         this.userMapper = userMapper;
         this.keycloakUserService = keycloakUserService;
+        this.secteurRepository =secteurRepository;
     }
 
     /**
@@ -76,7 +83,8 @@ public class UserService {
                     request.getUsername(),
                     request.getEmail(),
                     request.getPassword(),
-                    request.getUsername(),   // firstName = username
+                    request.getFirstName() != null ? request.getFirstName() : request.getUsername(),
+                    request.getLastName(),
                     request.getRole().name()
             );
         } catch (Exception e) {
@@ -87,26 +95,16 @@ public class UserService {
         User user = new User();
         user.setUsername(request.getUsername());
         user.setEmail(request.getEmail());
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
         user.setRole(request.getRole());
 
-        if (request.getProductionLineId() != null) {
-            ProductionLine line = lineRepository.findById(request.getProductionLineId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Ligne non trouvée"));
-            user.setProductionLine(line);
+        if (request.getSecteurId() != null) {
+            Secteur secteur = secteurRepository.findById(request.getSecteurId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Secteur non trouvé"));
+            user.setSecteur(secteur);
         }
-
         User saved = userRepository.save(user);
-
-        // Si une ligne a été assignée à la création → déclencher l'événement
-        if (saved.getProductionLine() != null) {
-            try {
-                User currentUser = getCurrentUser();
-                if (currentUser == null) currentUser = saved; // fallback (système)
-                messagingEventService.onLineAssignment(saved, saved.getProductionLine(), currentUser);
-            } catch (Exception e) {
-                System.err.println("WARNING: Failed to trigger line assignment event: " + e.getMessage());
-            }
-        }
 
         return userMapper.toResponseDTO(saved);
     }
@@ -119,22 +117,25 @@ public class UserService {
         String oldUsername = user.getUsername();
         Role oldRole = user.getRole();
         String oldEmail = user.getEmail();
-        Long oldLineId = user.getProductionLine() != null
-                ? user.getProductionLine().getId() : null;
 
         // Update database fields
         if (request.getEmail() != null) {
             user.setEmail(request.getEmail());
         }
+        if (request.getFirstName() != null) {
+            user.setFirstName(request.getFirstName());
+        }
+        if (request.getLastName() != null) {
+            user.setLastName(request.getLastName());
+        }
         if (request.getRole() != null) {
             user.setRole(request.getRole());
         }
-        if (request.getProductionLineId() != null) {
-            ProductionLine line = lineRepository.findById(request.getProductionLineId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Ligne non trouvée"));
-            user.setProductionLine(line);
+        if (request.getSecteurId() != null) {
+            Secteur secteur = secteurRepository.findById(request.getSecteurId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Secteur non trouvé"));
+            user.setSecteur(secteur);
         }
-
         // Sync with Keycloak
         try {
             // Update role if changed
@@ -157,18 +158,8 @@ public class UserService {
         User saved = userRepository.save(user);
 
         // Si la ligne a changé → déclencher l'événement de messagerie
-        Long newLineId = saved.getProductionLine() != null
-                ? saved.getProductionLine().getId() : null;
 
-        if (newLineId != null && !newLineId.equals(oldLineId)) {
-            try {
-                User currentUser = getCurrentUser();
-                if (currentUser == null) currentUser = saved; // fallback (système)
-                messagingEventService.onLineAssignment(saved, saved.getProductionLine(), currentUser);
-            } catch (Exception e) {
-                System.err.println("WARNING: Failed to trigger line assignment event: " + e.getMessage());
-            }
-        }
+
 
         return userMapper.toResponseDTO(saved);
     }
@@ -208,8 +199,8 @@ public class UserService {
         return userMapper.toResponseDTO(user);
     }
 
-    public List<UserResponseDTO> getUsersByProductionLine(Long lineId) {
-        return userRepository.findByProductionLineId(lineId).stream()
+    public List<UserResponseDTO> getUsersBySecteur(Long secteurId) {
+        return userRepository.findBySecteurId(secteurId).stream()
                 .map(userMapper::toResponseDTO)
                 .collect(Collectors.toList());
     }

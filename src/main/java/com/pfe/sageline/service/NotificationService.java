@@ -1,7 +1,8 @@
 package com.pfe.sageline.service;
 
-import com.pfe.sageline.dtos.NotificationResponseDTO;
+import com.pfe.sageline.dtos.response.NotificationResponseDTO;
 import com.pfe.sageline.entity.*;
+import com.pfe.sageline.enums.NotificationType;
 import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.repository.*;
 import lombok.RequiredArgsConstructor;

@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-17\" ./mvnw compile -q)"
+      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-17\" ./mvnw compile -q)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Eclipse Adoptium/jdk-17.0.14+7\" ./mvnw compile -q)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files/Java/**)",
+      "Read(//c/Program Files/Microsoft/**)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Eclipse Adoptium/jdk-17\" ./mvnw compile -q)"
     ]
   }
 }

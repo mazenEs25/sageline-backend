@@ -1,10 +1,11 @@
 package com.pfe.sageline.repository;
 import com.pfe.sageline.entity.Validation;
-import com.pfe.sageline.entity.ValidationStatus;
+import com.pfe.sageline.enums.TicketStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -12,9 +13,11 @@ import java.util.Optional;
 public interface ValidationRepository extends JpaRepository<Validation,Long> {
     List<Validation> findByValidationZoneId(Long validationZoneId);
     List<Validation> findByValidationZoneIdAndStartDateAfter(Long zoneId, LocalDateTime after);
-    List<Validation> findByStatus(ValidationStatus status);
+    List<Validation> findByStatus(TicketStatus status);
+
+    List<Validation> findByCreatedById(Long userId);
     @Query("SELECT v FROM Validation v WHERE v.validationZone.id = :zoneId AND v.status = :status")
-    List<Validation> findByZoneAndStatus(@Param("zoneId") Long zoneId, @Param("status") ValidationStatus status);
+    List<Validation> findByZoneAndStatus(@Param("zoneId") Long zoneId, @Param("status") TicketStatus status);
 
     @Query("SELECT v FROM Validation v WHERE v.startDate BETWEEN :start AND :end")
     List<Validation> findByDateRange(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
@@ -26,14 +29,43 @@ public interface ValidationRepository extends JpaRepository<Validation,Long> {
     List<Validation> findByProductionLineId(@Param("lineId") Long lineId);
 
     @Query("SELECT v FROM Validation v WHERE v.validationZone.productionLine.id = :lineId AND v.status = :status")
-    List<Validation> findByProductionLineIdAndStatus(@Param("lineId") Long lineId, @Param("status") ValidationStatus status);
+    List<Validation> findByProductionLineIdAndStatus(@Param("lineId") Long lineId, @Param("status") TicketStatus status);
 
     @Query("SELECT COUNT(v) FROM Validation v WHERE v.status = :status AND v.startDate >= :date")
-    Long countByStatusSinceDate(@Param("status") ValidationStatus status, @Param("date") LocalDateTime date);
+    Long countByStatusSinceDate(@Param("status") TicketStatus status, @Param("date") LocalDateTime date);
 
-    @Query("SELECT v FROM Validation v WHERE v.status = 'EN_COURS' ORDER BY v.startDate ASC")
+    @Query("SELECT v FROM Validation v WHERE v.status NOT IN ('CONFORME', 'NON_CONFORME', 'ANNULE') ORDER BY COALESCE(v.startDate, v.createdAt) ASC")
     List<Validation> findActiveValidations();
+    //ticket
+    @Query("SELECT v FROM Validation v WHERE v.plannedDate BETWEEN :start AND :end")
+    List<Validation> findByPlannedDateBetween(
+            @Param("start") LocalDate start, @Param("end") LocalDate end);
 
+    @Query("SELECT v FROM Validation v WHERE v.plannedWeekStart <= :date AND v.plannedWeekEnd >= :date")
+    List<Validation> findByPlannedWeek(@Param("date") LocalDate date);
+
+    @Query("SELECT v FROM Validation v " +
+            "JOIN v.validationZone z " +
+            "JOIN z.productionLine l " +
+            "JOIN l.phase p " +
+            "WHERE p.secteur.id = :secteurId")
+    List<Validation> findBySecteurId(@Param("secteurId") Long secteurId);
+
+    @Query("SELECT v FROM Validation v " +
+            "JOIN v.assignments a " +
+            "WHERE a.user.id = :userId " +
+            "AND v.status NOT IN ('CONFORME', 'NON_CONFORME', 'ANNULE')")
+    List<Validation> findActiveTicketsByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT v FROM Validation v " +
+            "WHERE v.priority = 'URGENTE' " +
+            "AND v.status NOT IN ('CONFORME', 'NON_CONFORME', 'ANNULE')")
+    List<Validation> findUrgentActiveTickets();
+
+    @Query("SELECT COALESCE(MAX(CAST(SUBSTRING(v.ticketCode, 10) AS int)), 0) " +
+            "FROM Validation v " +
+            "WHERE v.ticketCode LIKE :prefix")
+    int findMaxTicketNumber(@Param("prefix") String prefix);
     // Pour les KPIs
     @Query("SELECT COUNT(v) FROM Validation v WHERE v.validationZone.productionLine.id = :lineId AND v.status = 'CONFORME' AND v.endDate >= :startDate")
     Long countConformeByLineAndDateRange(@Param("lineId") Long lineId, @Param("startDate") LocalDateTime startDate);
@@ -41,3 +73,4 @@ public interface ValidationRepository extends JpaRepository<Validation,Long> {
     @Query("SELECT COUNT(v) FROM Validation v WHERE v.validationZone.productionLine.id = :lineId AND v.status = 'NON_CONFORME' AND v.endDate >= :startDate")
     Long countNonConformeByLineAndDateRange(@Param("lineId") Long lineId, @Param("startDate") LocalDateTime startDate);
 }
+

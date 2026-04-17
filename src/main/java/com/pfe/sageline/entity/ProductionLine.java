@@ -37,6 +37,13 @@ public class ProductionLine {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+    @Column(name = "line_number")
+    private Integer lineNumber; // 1-11
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "phase_id", nullable = false)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private Phase phase;
 
     @PrePersist
     protected void onCreate() {

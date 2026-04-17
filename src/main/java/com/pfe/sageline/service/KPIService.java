@@ -1,10 +1,10 @@
 package com.pfe.sageline.service;
 
-import com.pfe.sageline.dtos.KPIResponse;
+import com.pfe.sageline.dtos.response.KPIResponse;
 import com.pfe.sageline.entity.KPI;
 import com.pfe.sageline.entity.ProductionLine;
 import com.pfe.sageline.entity.Validation;
-import com.pfe.sageline.entity.ValidationStatus;
+import com.pfe.sageline.enums.TicketStatus;
 import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.mappers.KPIMapper;
 import com.pfe.sageline.repository.KPIRepository;
@@ -99,11 +99,11 @@ public class KPIService {
         List<Validation> allValidations = validationRepository.findByProductionLineId(lineId);
 
         long conformeCount = allValidations.stream()
-                .filter(v -> v.getStatus() == ValidationStatus.CONFORME)
+                .filter(v -> v.getStatus() == TicketStatus.CONFORME)
                 .count();
 
         long nonConformeCount = allValidations.stream()
-                .filter(v -> v.getStatus() == ValidationStatus.NON_CONFORME)
+                .filter(v -> v.getStatus() == TicketStatus.NON_CONFORME)
                 .count();
 
         long totalCount = conformeCount + nonConformeCount;
@@ -157,11 +157,11 @@ public class KPIService {
         Map<String, Long> counts = new HashMap<>();
 
         long conformeCount = validationRepository.findByProductionLineIdAndStatus(
-                lineId, ValidationStatus.CONFORME).size();
+                lineId, TicketStatus.CONFORME).size();
         long nonConformeCount = validationRepository.findByProductionLineIdAndStatus(
-                lineId, ValidationStatus.NON_CONFORME).size();
+                lineId, TicketStatus.NON_CONFORME).size();
         long enCoursCount = validationRepository.findByProductionLineIdAndStatus(
-                lineId, ValidationStatus.EN_COURS).size();
+                lineId, TicketStatus.EN_COURS).size();
 
         counts.put("total", conformeCount + nonConformeCount + enCoursCount);
         counts.put("conforme", conformeCount);
@@ -191,7 +191,7 @@ public class KPIService {
         Long nonConformeCount = validationRepository.countNonConformeByLineAndDateRange(lineId, startDateTime);
 
         long enCoursCount = validationRepository.findByDateRange(startDateTime, endDateTime).stream()
-                .filter(v -> v.getStatus() == ValidationStatus.EN_COURS)
+                .filter(v -> v.getStatus() == TicketStatus.EN_COURS)
                 .filter(v -> v.getValidationZone().getProductionLine().getId().equals(lineId))
                 .count();
 
@@ -221,8 +221,8 @@ public class KPIService {
         dashboard.put("activeValidations", activeValidations);
 
         // Taux de conformité global
-        long conformeCount = validationRepository.findByStatus(ValidationStatus.CONFORME).size();
-        long nonConformeCount = validationRepository.findByStatus(ValidationStatus.NON_CONFORME).size();
+        long conformeCount = validationRepository.findByStatus(TicketStatus.CONFORME).size();
+        long nonConformeCount = validationRepository.findByStatus(TicketStatus.NON_CONFORME).size();
         double conformityRate = 0.0;
         if ((conformeCount + nonConformeCount) > 0) {
             conformityRate = (conformeCount * 100.0) / (conformeCount + nonConformeCount);
@@ -239,7 +239,7 @@ public class KPIService {
         // Non-conformités cette semaine
         LocalDateTime weekStart = LocalDate.now().minusDays(7).atStartOfDay();
         Long nonConformitiesThisWeek = validationRepository.countByStatusSinceDate(
-                ValidationStatus.NON_CONFORME, weekStart);
+                TicketStatus.NON_CONFORME, weekStart);
         dashboard.put("nonConformitiesThisWeek", nonConformitiesThisWeek);
 
         // Nombre total de lignes

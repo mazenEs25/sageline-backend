@@ -1,6 +1,6 @@
 package com.pfe.sageline.service;
 
-import com.pfe.sageline.dtos.NonConformityPredictionResponseDTO;
+import com.pfe.sageline.dtos.response.NonConformityPredictionResponseDTO;
 import com.pfe.sageline.entity.NonConformityPrediction;
 import com.pfe.sageline.entity.Validation;
 import com.pfe.sageline.repository.NonConformityPredictionRepository;

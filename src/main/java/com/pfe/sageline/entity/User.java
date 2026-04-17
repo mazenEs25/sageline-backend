@@ -1,9 +1,8 @@
 package com.pfe.sageline.entity;
 
+import com.pfe.sageline.enums.Role;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDateTime;
 @Entity
@@ -11,6 +10,7 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -19,17 +19,27 @@ public class User {
     @Column(nullable = false, unique = true)
     private String username;
 
+    @Column(name = "keycloak_id", unique = true)
+    private String keycloakId;
+
     @Column(nullable = false)
     private String email;
+
+    @Column(name = "first_name")
+    private String firstName;
+
+    @Column(name = "last_name")
+    private String lastName;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
-
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "production_line_id")
-    private ProductionLine productionLine;
-
+    @JoinColumn(name = "secteur_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private Secteur secteur; // Optional — for filtering users by sector
+    
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

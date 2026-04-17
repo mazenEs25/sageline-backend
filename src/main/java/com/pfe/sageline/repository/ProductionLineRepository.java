@@ -2,6 +2,7 @@ package com.pfe.sageline.repository;
 import com.pfe.sageline.entity.ProductionLine;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,4 +21,17 @@ public interface ProductionLineRepository extends JpaRepository<ProductionLine,L
 
     @Query("SELECT COUNT(vz) FROM ValidationZone vz WHERE vz.productionLine.id = :lineId")
     Long countZonesByLineId(Long lineId);
+    List<ProductionLine> findByPhaseId(Long phaseId);
+
+    List<ProductionLine> findByPhaseIdAndActiveTrue(Long phaseId);
+
+    List<ProductionLine> findByPhaseSecteurId(Long secteurId);
+
+    @Query("SELECT pl FROM ProductionLine pl " +
+            "JOIN FETCH pl.phase p " +
+            "JOIN FETCH p.secteur s " +
+            "WHERE pl.id = :id")
+    Optional<ProductionLine> findByIdWithPhaseAndSecteur(@Param("id") Long id);
+
+    List<ProductionLine> findAllByOrderByPhaseIdAscLineNumberAsc();
 }

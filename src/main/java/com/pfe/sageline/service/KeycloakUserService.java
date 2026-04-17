@@ -29,7 +29,7 @@ public class KeycloakUserService {
 
 
     public String createUser(String username, String email, String password,
-                             String firstName, String role) {
+                             String firstName, String lastName, String role) {
 
         RealmResource realmResource = keycloak.realm(realm);
         UsersResource usersResource = realmResource.users();
@@ -39,6 +39,7 @@ public class KeycloakUserService {
         user.setUsername(username);
         user.setEmail(email);
         user.setFirstName(firstName != null ? firstName : username);
+        user.setLastName(lastName);
         user.setEnabled(true);
         user.setEmailVerified(true);
 

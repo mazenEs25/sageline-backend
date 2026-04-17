@@ -1,8 +1,8 @@
 package com.pfe.sageline.controller;
 
 
-import com.pfe.sageline.dtos.ProductionLineRequestDTO;
-import com.pfe.sageline.dtos.ProductionLineResponseDTO;
+import com.pfe.sageline.dtos.request.ProductionLineRequestDTO;
+import com.pfe.sageline.dtos.response.ProductionLineResponseDTO;
 import com.pfe.sageline.service.ProductionLineService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,28 +22,28 @@ public class ProductionLineController {
     private final ProductionLineService productionLineService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT','TECH_VAL', 'TECH_PREP')")
     public ResponseEntity<List<ProductionLineResponseDTO>> getAllLines() {
         List<ProductionLineResponseDTO> lines = productionLineService.getAllProductionLines();
         return ResponseEntity.ok(lines);
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT','TECH_VAL', 'TECH_PREP')")
     public ResponseEntity<ProductionLineResponseDTO> getLineById(@PathVariable Long id) {
         ProductionLineResponseDTO line = productionLineService.getProductionLineById(id);
         return ResponseEntity.ok(line);
     }
 
     @GetMapping("/code/{code}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL', 'TECH_PREP')")
     public ResponseEntity<ProductionLineResponseDTO> getLineByCode(@PathVariable String code) {
         ProductionLineResponseDTO line = productionLineService.getProductionLineByCode(code);
         return ResponseEntity.ok(line);
     }
 
     @GetMapping("/active")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION', 'TECH_PREPARATION')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL', 'TECH_PREP')")
     public ResponseEntity<List<ProductionLineResponseDTO>> getActiveLines() {
         List<ProductionLineResponseDTO> lines = productionLineService.getActiveProductionLines();
         return ResponseEntity.ok(lines);
@@ -91,5 +91,18 @@ public class ProductionLineController {
     public ResponseEntity<Boolean> checkCodeExists(@PathVariable String code) {
         boolean exists = productionLineService.existsByCode(code);
         return ResponseEntity.ok(exists);
+    }
+    @GetMapping("/phase/{phaseId}")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL', 'TECH_PREP')")
+    public ResponseEntity<List<ProductionLineResponseDTO>> getLinesByPhase(
+            @PathVariable Long phaseId) {
+        return ResponseEntity.ok(productionLineService.getLinesByPhase(phaseId));
+    }
+
+    @GetMapping("/secteur/{secteurId}")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL', 'TECH_PREP')")
+    public ResponseEntity<List<ProductionLineResponseDTO>> getLinesBySecteur(
+            @PathVariable Long secteurId) {
+        return ResponseEntity.ok(productionLineService.getLinesBySecteur(secteurId));
     }
 }

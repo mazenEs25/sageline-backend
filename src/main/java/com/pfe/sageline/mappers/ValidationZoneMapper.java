@@ -1,7 +1,7 @@
 package com.pfe.sageline.mappers;
 
-import com.pfe.sageline.dtos.ValidationZoneRequestDTO;
-import com.pfe.sageline.dtos.ValidationZoneResponseDTO;
+import com.pfe.sageline.dtos.request.ValidationZoneRequestDTO;
+import com.pfe.sageline.dtos.response.ValidationZoneResponseDTO;
 import com.pfe.sageline.entity.ValidationZone;
 import org.springframework.stereotype.Component;
 

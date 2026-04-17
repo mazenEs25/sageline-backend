@@ -1,7 +1,7 @@
 package com.pfe.sageline.mappers;
 
-import com.pfe.sageline.dtos.ValidationResultRequestDTO;
-import com.pfe.sageline.dtos.ValidationResultResponseDTO;
+import com.pfe.sageline.dtos.request.ValidationResultRequestDTO;
+import com.pfe.sageline.dtos.response.ValidationResultResponseDTO;
 import com.pfe.sageline.entity.ValidationResult;
 import org.springframework.stereotype.Component;
 

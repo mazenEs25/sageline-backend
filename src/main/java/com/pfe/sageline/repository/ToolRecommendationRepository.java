@@ -1,7 +1,7 @@
 package com.pfe.sageline.repository;
 
 import com.pfe.sageline.entity.ToolRecommendation;
-import com.pfe.sageline.entity.ToolStatus;
+import com.pfe.sageline.enums.ToolStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

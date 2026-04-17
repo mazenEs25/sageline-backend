@@ -1,6 +1,10 @@
 package com.pfe.sageline.service;
 
 import com.pfe.sageline.entity.*;
+import com.pfe.sageline.enums.AnomalyType;
+import com.pfe.sageline.enums.Severity;
+import com.pfe.sageline.enums.TicketStatus;
+import com.pfe.sageline.enums.ValidationStatus;
 import com.pfe.sageline.repository.ValidationRepository;
 import com.pfe.sageline.repository.ValidationResultRepository;
 import com.pfe.sageline.repository.AnomalyDetectionRepository;
@@ -65,7 +69,7 @@ public class AnomalyDetectionService {
      * Detect anomalies across all active validations.
      */
     public List<AnomalyResult> scanAllActive() {
-        List<Validation> activeValidations = validationRepository.findByStatus(ValidationStatus.EN_COURS);
+        List<Validation> activeValidations = validationRepository.findByStatus(TicketStatus.EN_COURS.EN_COURS);
         List<AnomalyResult> allAnomalies = new ArrayList<>();
 
         for (Validation v : activeValidations) {

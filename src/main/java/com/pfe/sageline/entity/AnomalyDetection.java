@@ -1,5 +1,7 @@
 package com.pfe.sageline.entity;
 
+import com.pfe.sageline.enums.AnomalyType;
+import com.pfe.sageline.enums.Severity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;

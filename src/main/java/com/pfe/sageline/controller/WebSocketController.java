@@ -2,13 +2,10 @@ package com.pfe.sageline.controller;
 
 import com.pfe.sageline.Config.WebSocketEventListener;
 import com.pfe.sageline.dtos.WebSocketMessageDTO;
-import com.pfe.sageline.dtos.MessageRequestDTO;
-import com.pfe.sageline.dtos.MessageResponseDTO;
+import com.pfe.sageline.dtos.request.MessageRequestDTO;
 import com.pfe.sageline.service.MessageService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;

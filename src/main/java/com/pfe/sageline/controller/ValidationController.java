@@ -1,135 +1,158 @@
 package com.pfe.sageline.controller;
 
-
-import com.pfe.sageline.dtos.ValidationRequestDTO;
-import com.pfe.sageline.dtos.ValidationResponseDTO;
-import com.pfe.sageline.entity.ValidationStatus;
+import com.pfe.sageline.dtos.request.*;
+import com.pfe.sageline.dtos.response.PrepValidationRequestDTO;
+import com.pfe.sageline.dtos.response.ValidationResponseDTO;
+import com.pfe.sageline.enums.TicketStatus;
 import com.pfe.sageline.service.ValidationService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
+import com.pfe.sageline.Config.SecurityUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/validations")
+@CrossOrigin(origins = "http://localhost:4200")
 @RequiredArgsConstructor
-@Tag(name = "Validation Management", description = "Endpoints pour la gestion des validations")
-@CrossOrigin(origins = "*")
 public class ValidationController {
 
     private final ValidationService validationService;
+    private final SecurityUtils securityUtils;
+
+    // ========================
+    // LIST & SEARCH
+    // ========================
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
-    @Operation(summary = "Récupérer toutes les validations")
     public ResponseEntity<List<ValidationResponseDTO>> getAllValidations() {
-        List<ValidationResponseDTO> validations = validationService.getAllValidations();
-        return ResponseEntity.ok(validations);
+        return ResponseEntity.ok(validationService.getAllValidations());
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
-    @Operation(summary = "Récupérer une validation par ID")
     public ResponseEntity<ValidationResponseDTO> getValidationById(@PathVariable Long id) {
-        ValidationResponseDTO validation = validationService.getValidationById(id);
-        return ResponseEntity.ok(validation);
-    }
-
-    @GetMapping("/zone/{zoneId}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
-    @Operation(summary = "Récupérer les validations d'une zone")
-    public ResponseEntity<List<ValidationResponseDTO>> getValidationsByZone(@PathVariable Long zoneId) {
-        List<ValidationResponseDTO> validations = validationService.getValidationsByZone(zoneId);
-        return ResponseEntity.ok(validations);
+        return ResponseEntity.ok(validationService.getValidationById(id));
     }
 
     @GetMapping("/status/{status}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
-    @Operation(summary = "Récupérer les validations par statut")
-    public ResponseEntity<List<ValidationResponseDTO>> getValidationsByStatus(@PathVariable ValidationStatus status) {
-        List<ValidationResponseDTO> validations = validationService.getValidationsByStatus(status);
-        return ResponseEntity.ok(validations);
+    public ResponseEntity<List<ValidationResponseDTO>> getValidationsByStatus(
+            @PathVariable TicketStatus status) {
+        return ResponseEntity.ok(validationService.getValidationsByStatus(status));
     }
 
-    @GetMapping("/active")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
-    @Operation(summary = "Récupérer les validations en cours")
-    public ResponseEntity<List<ValidationResponseDTO>> getActiveValidations() {
-        List<ValidationResponseDTO> validations = validationService.getActiveValidations();
-        return ResponseEntity.ok(validations);
+    @GetMapping("/zone/{zoneId}")
+    public ResponseEntity<List<ValidationResponseDTO>> getValidationsByZone(
+            @PathVariable Long zoneId) {
+        return ResponseEntity.ok(validationService.getValidationsByZone(zoneId));
     }
 
     @GetMapping("/line/{lineId}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT')")
-    @Operation(summary = "Récupérer les validations d'une ligne de production")
-    public ResponseEntity<List<ValidationResponseDTO>> getValidationsByLine(@PathVariable Long lineId) {
-        List<ValidationResponseDTO> validations = validationService.getValidationsByProductionLine(lineId);
-        return ResponseEntity.ok(validations);
+    public ResponseEntity<List<ValidationResponseDTO>> getValidationsByLine(
+            @PathVariable Long lineId) {
+        return ResponseEntity.ok(validationService.getValidationsByLine(lineId));
     }
 
-    @GetMapping("/date-range")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT')")
-    @Operation(summary = "Récupérer les validations par plage de dates")
-    public ResponseEntity<List<ValidationResponseDTO>> getValidationsByDateRange(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
-        List<ValidationResponseDTO> validations = validationService.getValidationsByDateRange(start, end);
-        return ResponseEntity.ok(validations);
+    @GetMapping("/secteur/{secteurId}")
+    public ResponseEntity<List<ValidationResponseDTO>> getValidationsBySecteur(
+            @PathVariable Long secteurId) {
+        return ResponseEntity.ok(validationService.getValidationsBySecteur(secteurId));
     }
+
+    @GetMapping("/my-tickets")
+    public ResponseEntity<List<ValidationResponseDTO>> getMyTickets() {
+        Long userId = securityUtils.getCurrentUserId();
+        return ResponseEntity.ok(validationService.getMyTickets(userId));
+    }
+
+    @GetMapping("/week/{date}")
+    public ResponseEntity<List<ValidationResponseDTO>> getTicketsByWeek(
+            @PathVariable LocalDate date) {
+        return ResponseEntity.ok(validationService.getTicketsByWeek(date));
+    }
+
+    // ========================
+    // TICKET CREATION
+    // ========================
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('TECH_VALIDATION', 'CHEF_SECTEUR')")
-    @Operation(summary = "Lancer une nouvelle validation")
-    public ResponseEntity<ValidationResponseDTO> startValidation(@Valid @RequestBody ValidationRequestDTO request) {
-        ValidationResponseDTO validation = validationService.startValidation(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(validation);
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")
+    public ResponseEntity<ValidationResponseDTO> createTicket(
+            @Valid @RequestBody TicketCreateRequestDTO dto) {
+        Long createdByUserId = securityUtils.getCurrentUserId();
+        return new ResponseEntity<>(
+                validationService.createTicket(dto, createdByUserId),
+                HttpStatus.CREATED);
     }
 
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('TECH_VALIDATION', 'CHEF_SECTEUR')")
-    @Operation(summary = "Modifier une validation")
-    public ResponseEntity<ValidationResponseDTO> updateValidation(
+    @PostMapping("/plan-week")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")
+    public ResponseEntity<List<ValidationResponseDTO>> planWeek(
+            @Valid @RequestBody TicketWeekPlanRequestDTO dto) {
+        Long createdByUserId = securityUtils.getCurrentUserId();
+        return new ResponseEntity<>(
+                validationService.planWeek(dto, createdByUserId),
+                HttpStatus.CREATED);
+    }
+
+    // ========================
+    // TICKET WORKFLOW TRANSITIONS
+    // ========================
+
+    @PatchMapping("/{id}/start-prep")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'TECH_PREP')")
+    public ResponseEntity<ValidationResponseDTO> startPrep(@PathVariable Long id) {
+        return ResponseEntity.ok(validationService.startPrep(id));
+    }
+
+    @PatchMapping("/{id}/validate-prep")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'TECH_PREP')")
+    public ResponseEntity<ValidationResponseDTO> validatePrep(
             @PathVariable Long id,
-            @Valid @RequestBody ValidationRequestDTO request) {
-        ValidationResponseDTO validation = validationService.updateValidation(id, request);
-        return ResponseEntity.ok(validation);
+            @RequestBody PrepValidationRequestDTO dto) {
+        Long techPrepUserId = securityUtils.getCurrentUserId();
+        return ResponseEntity.ok(validationService.validatePrep(id, dto, techPrepUserId));
     }
 
+    @PatchMapping("/{id}/start")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'TECH_VAL')")
+    public ResponseEntity<ValidationResponseDTO> startValidation(@PathVariable Long id) {
+        return ResponseEntity.ok(validationService.startValidation(id));
+    }
 
-    @PutMapping("/close/{id}")
-    @PreAuthorize("hasAnyRole('TECH_VALIDATION', 'CHEF_SECTEUR')")
-    public ResponseEntity<ValidationResponseDTO> closeValidation(
+    @PatchMapping("/{id}/submit-review")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'TECH_VAL')")
+    public ResponseEntity<ValidationResponseDTO> submitForReview(@PathVariable Long id) {
+        return ResponseEntity.ok(validationService.submitForReview(id));
+    }
+
+    @PatchMapping("/{id}/close")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT')")
+    public ResponseEntity<ValidationResponseDTO> closeTicket(
             @PathVariable Long id,
-            @RequestParam ValidationStatus finalStatus,
-            @RequestParam(required = false) String comments) {
-
-        ValidationResponseDTO validation =
-                validationService.closeValidation(id, finalStatus, comments);
-
-        return ResponseEntity.ok(validation);
+            @RequestBody TicketCloseRequestDTO dto) {
+        return ResponseEntity.ok(validationService.closeTicket(id, dto));
     }
+
+    @PatchMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")
+    public ResponseEntity<ValidationResponseDTO> cancelTicket(
+            @PathVariable Long id,
+            @RequestParam(required = false) String reason) {
+        return ResponseEntity.ok(validationService.cancelTicket(id, reason != null ? reason : "Annulé"));
+    }
+
+    // ========================
+    // DELETE
+    // ========================
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")
-    @Operation(summary = "Supprimer une validation")
     public ResponseEntity<Void> deleteValidation(@PathVariable Long id) {
         validationService.deleteValidation(id);
         return ResponseEntity.noContent().build();
-    }
-
-    @GetMapping("/{id}/with-results")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
-    @Operation(summary = "Récupérer une validation avec tous ses résultats")
-    public ResponseEntity<ValidationResponseDTO> getValidationWithResults(@PathVariable Long id) {
-        ValidationResponseDTO validation = validationService.getValidationById(id);
-        return ResponseEntity.ok(validation);
     }
 }

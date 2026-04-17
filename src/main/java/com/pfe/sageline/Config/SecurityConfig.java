@@ -53,6 +53,8 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
 
                         // ─── ADMIN ENDPOINTS ───
+                                // In your SecurityFilterChain, add this BEFORE other /api/users rules:
+                                .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
                         // Users: only ADMIN_IT can create/update/delete
                         .requestMatchers(HttpMethod.POST, "/api/users/**").hasRole("ADMIN_IT")
                         .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN_IT")
@@ -68,6 +70,32 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/zones/**").hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
                         .requestMatchers(HttpMethod.PUT, "/api/zones/**").hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
                         .requestMatchers(HttpMethod.DELETE, "/api/zones/**").hasRole("ADMIN_IT")
+                                // Secteurs
+                                // .requestMatchers(HttpMethod.GET, "/api/secteurs/**").authenticated()
+                                .requestMatchers(HttpMethod.POST, "/api/secteurs/**").hasRole("ADMIN_IT")
+                                .requestMatchers(HttpMethod.PUT, "/api/secteurs/**").hasRole("ADMIN_IT")
+                                .requestMatchers(HttpMethod.DELETE, "/api/secteurs/**").hasRole("ADMIN_IT")
+
+// Phases
+                                .requestMatchers(HttpMethod.GET, "/api/phases/**").authenticated()
+                                .requestMatchers(HttpMethod.POST, "/api/phases/**").hasRole("ADMIN_IT")
+                                .requestMatchers(HttpMethod.PUT, "/api/phases/**").hasRole("ADMIN_IT")
+                                .requestMatchers(HttpMethod.DELETE, "/api/phases/**").hasRole("ADMIN_IT")
+
+// Assignments
+                                .requestMatchers(HttpMethod.GET, "/api/assignments/**").authenticated()
+                                .requestMatchers(HttpMethod.POST, "/api/assignments/**").hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
+                                .requestMatchers(HttpMethod.PUT, "/api/assignments/**").hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
+                                .requestMatchers(HttpMethod.PATCH, "/api/assignments/**").authenticated()
+                                .requestMatchers(HttpMethod.DELETE, "/api/assignments/**").hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
+
+// Validation ticket workflow
+                                .requestMatchers(HttpMethod.PATCH, "/api/validations/*/start-prep").hasAnyRole("ADMIN_IT", "TECH_PREP")
+                                .requestMatchers(HttpMethod.PATCH, "/api/validations/*/validate-prep").hasAnyRole("ADMIN_IT", "TECH_PREP")
+                                .requestMatchers(HttpMethod.PATCH, "/api/validations/*/start").hasAnyRole("ADMIN_IT", "TECH_VAL")
+                                .requestMatchers(HttpMethod.PATCH, "/api/validations/*/submit-review").hasAnyRole("ADMIN_IT", "TECH_VAL")
+                                .requestMatchers(HttpMethod.PATCH, "/api/validations/*/close").hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "EXPERT")
+                                .requestMatchers(HttpMethod.PATCH, "/api/validations/*/cancel").hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
 
                         // ─── VALIDATION ENDPOINTS ───
                         // Create/close validations: TECH_VALIDATION, CHEF_SECTEUR, ADMIN_IT
@@ -83,6 +111,8 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "TECH_VALIDATION")
                         .requestMatchers(HttpMethod.DELETE, "/api/validation-results/**")
                         .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "TECH_VALIDATION")
+
+
 
                         // KPIs: recalculate is admin-only
                         .requestMatchers(HttpMethod.POST, "/api/kpis/**").hasRole("ADMIN_IT")

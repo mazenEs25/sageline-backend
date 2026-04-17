@@ -1,8 +1,9 @@
 package com.pfe.sageline.controller;
 
-import com.pfe.sageline.dtos.MessageRequestDTO;
-import com.pfe.sageline.dtos.ConversationResponseDTO;
-import com.pfe.sageline.dtos.MessageResponseDTO;
+import com.pfe.sageline.Config.SecurityUtils;
+import com.pfe.sageline.dtos.request.MessageRequestDTO;
+import com.pfe.sageline.dtos.response.ConversationResponseDTO;
+import com.pfe.sageline.dtos.response.MessageResponseDTO;
 import com.pfe.sageline.service.MessageService;
 import lombok.*;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ import java.util.Map;
 public class MessageController {
 
     private final MessageService messageService;
+    private final SecurityUtils securityUtils;
 
     // --- Conversations ---
 
@@ -33,6 +35,13 @@ public class MessageController {
         return ResponseEntity.ok(
                 messageService.getOrCreateConversation(
                         body.get("userOneId"), body.get("userTwoId")));
+    }
+
+    @PostMapping("/conversations/with/{userId}")
+    public ResponseEntity<ConversationResponseDTO> getOrCreateConversationWithUser(
+            @PathVariable Long userId) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        return ResponseEntity.ok(messageService.getOrCreateConversation(currentUserId, userId));
     }
 
     // --- Messages ---

@@ -1,8 +1,11 @@
 package com.pfe.sageline.service;
 
 import com.pfe.sageline.entity.*;
+import com.pfe.sageline.enums.*;
+import com.pfe.sageline.repository.ValidationAssignmentRepository;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +17,7 @@ public class MessagingEventService {
 
     private final MessageService messageService;
     private final NotificationService notificationService;
+    private final ValidationAssignmentRepository assignmentRepository;
 
     /**
      * Appelé quand un utilisateur est affecté à une ligne de production.
@@ -64,6 +68,7 @@ public class MessagingEventService {
      * Appelé quand une validation est créée et affectée.
      * Le technicien reçoit les détails de la validation.
      */
+    /*
     public void onValidationCreated(Validation validation, User assignedTech, User createdBy) {
         log.info("Événement: Validation #{} créée par {}, affectée à {}",
                 validation.getId(), createdBy.getUsername(), assignedTech.getUsername());
@@ -117,6 +122,7 @@ public class MessagingEventService {
                 "VALIDATION"
         );
     }
+    */
 
     /**
      * Appelé quand l'IA détecte un risque élevé.
@@ -145,13 +151,227 @@ public class MessagingEventService {
      * Appelé quand une validation est clôturée.
      */
     public void onValidationClosed(Validation validation, User closedBy) {
-        String statusLabel = validation.getStatus() == ValidationStatus.CONFORME
+        String statusLabel = validation.getStatus() == TicketStatus.CONFORME
                 ? "✅ CONFORME" : "❌ NON CONFORME";
 
-        // Trouver la conversation liée à cette validation
-        // et envoyer un message de clôture
-        log.info("Validation #{} clôturée par {} — Statut: {}",
-                validation.getId(), closedBy.getUsername(), validation.getStatus());
+        log.info("Validation #{} clôturée par {} — Statut: {} ({})",
+                validation.getId(), closedBy.getUsername(), validation.getStatus(), statusLabel);
+    }
+
+    // =====================================================
+    // TICKET WORKFLOW EVENTS
+    // =====================================================
+
+    public void onTicketAssignment(ValidationAssignment assignment) {
+        Validation validation = assignment.getValidation();
+        User user = assignment.getUser();
+        if (user == null || validation == null) {
+            return;
+        }
+
+        String roleName = assignment.getAssignmentRole() == AssignmentRole.TECH_PREPARATION
+                ? "Technicien Préparation" : "Technicien Validation";
+
+        // Zone, ligne, secteur info
+        String zoneName = assignment.getZone() != null ? assignment.getZone().getName() : "?";
+        String lineName = "?";
+        String secteurName = "?";
+        try {
+            if (validation.getValidationZone() != null) {
+                if (validation.getValidationZone().getProductionLine() != null) {
+                    ProductionLine line = validation.getValidationZone().getProductionLine();
+                    lineName = line.getName();
+                    if (line.getPhase() != null && line.getPhase().getSecteur() != null) {
+                        secteurName = line.getPhase().getSecteur().getName();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Impossible de charger les détails zone/ligne/secteur: {}", e.getMessage());
+        }
+
+        String priority = validation.getPriority() != null ? validation.getPriority().name() : "NORMALE";
+        String plannedDate = validation.getPlannedDate() != null
+                ? validation.getPlannedDate().toString() : "Non définie";
+        String comments = validation.getComments() != null && !validation.getComments().isBlank()
+                ? validation.getComments() : "Aucun";
+        String assignerName = validation.getCreatedBy() != null
+                ? validation.getCreatedBy().getUsername() : "Système";
+        String assignerRole = validation.getCreatedBy() != null
+                ? formatRole(validation.getCreatedBy().getRole()) : "";
+
+        // 1. Notification push
+        String title = "Nouvelle affectation — Ticket " + validation.getTicketCode();
+        String notifContent = String.format(
+                "Vous avez été affecté(e) au ticket %s en tant que %s sur la zone %s. Priorité: %s",
+                validation.getTicketCode(), roleName, zoneName, priority
+        );
+
+        notificationService.createAndSend(
+                user.getId(),
+                title,
+                notifContent,
+                NotificationType.TICKET_ASSIGNMENT,
+                validation.getId(),
+                "VALIDATION"
+        );
+
+        // 2. Auto-create VALIDATION_ASSIGNMENT conversation with detailed message
+        if (validation.getCreatedBy() != null && !validation.getCreatedBy().getId().equals(user.getId())) {
+            try {
+                String autoMsg = String.format(
+                        "📋 Nouvelle affectation — Ticket %s\n\n" +
+                        "👤 Rôle : %s\n" +
+                        "📍 Zone : %s\n" +
+                        "🏭 Ligne : %s\n" +
+                        "🔧 Secteur : %s\n" +
+                        "⚡ Priorité : %s\n" +
+                        "📅 Date planifiée : %s\n" +
+                        "💬 Commentaires : %s\n\n" +
+                        "Affecté par : %s (%s)\n" +
+                        "N'hésitez pas à poser vos questions ici.",
+                        validation.getTicketCode(),
+                        roleName,
+                        zoneName,
+                        lineName,
+                        secteurName,
+                        priority,
+                        plannedDate,
+                        comments,
+                        assignerName,
+                        assignerRole
+                );
+                messageService.sendAutoMessageForValidation(
+                        validation.getCreatedBy().getId(),
+                        user.getId(),
+                        autoMsg,
+                        validation.getId()
+                );
+
+                // Notify the creator (chef secteur) so their conversation list
+                // refreshes in real-time (the tech user is already notified above).
+                notificationService.createAndSend(
+                        validation.getCreatedBy().getId(),
+                        "Conversation ouverte — Ticket " + validation.getTicketCode(),
+                        String.format("Une conversation a été créée avec %s (%s) pour le ticket %s.",
+                                user.getUsername(), roleName, validation.getTicketCode()),
+                        NotificationType.TICKET_ASSIGNMENT,
+                        validation.getId(),
+                        "VALIDATION"
+                );
+            } catch (Exception e) {
+                log.warn("Auto-message échoué pour user {}: {}", user.getId(), e.getMessage(), e);
+            }
+        }
+
+        log.info("Ticket {} affecté à {} ({})",
+                validation.getTicketCode(), user.getUsername(), assignment.getAssignmentRole());
+    }
+
+    public void onTicketStatusChange(Validation validation, TicketStatus previous, User actor) {
+        String title = "Ticket " + validation.getTicketCode() + " — " + validation.getStatus();
+        String content = String.format(
+                "Statut changé de %s → %s par %s.",
+                previous, validation.getStatus(),
+                actor != null ? actor.getUsername() : "système"
+        );
+
+        if (validation.getAssignments() != null) {
+            validation.getAssignments().forEach(a -> {
+                if (a.getUser() != null) {
+                    notificationService.createAndSend(
+                            a.getUser().getId(),
+                            title, content,
+                            NotificationType.TICKET_STATUS_CHANGE,
+                            validation.getId(),
+                            "VALIDATION"
+                    );
+                }
+            });
+        }
+
+        log.info("Ticket {} : {} → {}", validation.getTicketCode(), previous, validation.getStatus());
+    }
+
+    public void onPrepValidated(Validation validation, User techPrep) {
+        String title = "Outillage validé — Ticket " + validation.getTicketCode();
+        String content = String.format(
+                "L'outillage du ticket %s a été vérifié et validé par %s.",
+                validation.getTicketCode(),
+                techPrep != null ? techPrep.getUsername() : "TECH_PREP"
+        );
+
+        if (validation.getAssignments() != null) {
+            validation.getAssignments().stream()
+                    .filter(a -> a.getAssignmentRole() == AssignmentRole.TECH_VALIDATION)
+                    .forEach(a -> {
+                        if (a.getUser() != null) {
+                            notificationService.createAndSend(
+                                    a.getUser().getId(),
+                                    title, content,
+                                    NotificationType.PREP_VALIDATED,
+                                    validation.getId(),
+                                    "VALIDATION"
+                            );
+                        }
+                    });
+        }
+
+        log.info("Outillage validé pour ticket {} par {}",
+                validation.getTicketCode(),
+                techPrep != null ? techPrep.getUsername() : "?");
+    }
+
+    public void onTicketSubmittedForReview(Validation validation, User submittedBy) {
+        String title = "Ticket en revue — " + validation.getTicketCode();
+        String content = String.format(
+                "Le ticket %s a été soumis pour revue par %s.",
+                validation.getTicketCode(),
+                submittedBy != null ? submittedBy.getUsername() : "technicien"
+        );
+
+        User creator = validation.getCreatedBy();
+        if (creator != null) {
+            notificationService.createAndSend(
+                    creator.getId(),
+                    title, content,
+                    NotificationType.TICKET_REVIEW,
+                    validation.getId(),
+                    "VALIDATION"
+            );
+        }
+
+        log.info("Ticket {} soumis en revue par {}",
+                validation.getTicketCode(),
+                submittedBy != null ? submittedBy.getUsername() : "?");
+    }
+
+    public void onTicketCancelled(Validation validation, User cancelledBy, String reason) {
+        String title = "Ticket annulé — " + validation.getTicketCode();
+        String content = String.format(
+                "Le ticket %s a été annulé par %s.%s",
+                validation.getTicketCode(),
+                cancelledBy != null ? cancelledBy.getUsername() : "système",
+                reason != null && !reason.isBlank() ? " Raison: " + reason : ""
+        );
+
+        if (validation.getAssignments() != null) {
+            validation.getAssignments().forEach(a -> {
+                if (a.getUser() != null) {
+                    notificationService.createAndSend(
+                            a.getUser().getId(),
+                            title, content,
+                            NotificationType.TICKET_CANCELLED,
+                            validation.getId(),
+                            "VALIDATION"
+                    );
+                }
+            });
+        }
+
+        log.info("Ticket {} annulé par {}",
+                validation.getTicketCode(),
+                cancelledBy != null ? cancelledBy.getUsername() : "?");
     }
 
     private String formatRole(Role role) {

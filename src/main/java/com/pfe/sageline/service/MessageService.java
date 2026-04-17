@@ -1,12 +1,16 @@
 package com.pfe.sageline.service;
 
-import com.pfe.sageline.dtos.MessageRequestDTO;
-import com.pfe.sageline.dtos.ConversationResponseDTO;
-import com.pfe.sageline.dtos.MessageResponseDTO;
+import com.pfe.sageline.dtos.request.MessageRequestDTO;
+import com.pfe.sageline.dtos.response.ConversationResponseDTO;
+import com.pfe.sageline.dtos.response.MessageResponseDTO;
 import com.pfe.sageline.entity.*;
+import com.pfe.sageline.enums.ConversationType;
+import com.pfe.sageline.enums.MessageType;
+import com.pfe.sageline.enums.NotificationType;
 import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +23,7 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class MessageService {
 
     private final ConversationRepository conversationRepository;
@@ -164,6 +169,44 @@ public class MessageService {
         return messageRepository.countTotalUnread(userId);
     }
 
+    /**
+     * Send an automatic system message between two users.
+     * Creates a conversation if one does not already exist.
+     */
+    public void sendAutoMessage(Long senderId, Long receiverId, String content) {
+        ConversationResponseDTO conv = getOrCreateConversation(senderId, receiverId);
+        sendSystemMessage(conv.getId(), content, MessageType.VALIDATION_ASSIGNMENT, senderId);
+    }
+
+    /**
+     * Send an automatic system message for a validation ticket assignment.
+     * Creates or reuses a VALIDATION_ASSIGNMENT conversation linked to the ticket.
+     * After sending the message, broadcasts a refresh signal to both participants'
+     * notification channels so their conversation lists update in real-time.
+     */
+    public void sendAutoMessageForValidation(Long senderId, Long receiverId,
+                                              String content, Long validationId) {
+        // Try to find an existing conversation linked to this validation
+        Conversation conversation = conversationRepository
+                .findByParticipantsAndReference(senderId, receiverId, validationId, "VALIDATION")
+                .orElseGet(() -> createConversation(
+                        senderId, receiverId,
+                        ConversationType.VALIDATION_ASSIGNMENT,
+                        validationId, "VALIDATION"));
+
+        sendSystemMessage(conversation.getId(), content,
+                MessageType.VALIDATION_ASSIGNMENT, senderId);
+
+        // Broadcast a lightweight "new conversation" signal to both users so their
+        // conversation list components reload immediately without needing a page refresh.
+        Map<String, Object> refreshPayload = Map.of(
+                "notificationType", "NEW_CONVERSATION",
+                "conversationId", conversation.getId()
+        );
+        messagingTemplate.convertAndSend("/topic/notifications." + senderId, (Object) refreshPayload);
+        messagingTemplate.convertAndSend("/topic/notifications." + receiverId, (Object) refreshPayload);
+    }
+
     // =====================================================
     // HELPERS
     // =====================================================
@@ -180,20 +223,30 @@ public class MessageService {
     }
 
     private ConversationResponseDTO toConversationDTO(Conversation c, Long currentUserId) {
-        // Dernier message
-        System.out.println("=== DEBUG: Conversation ID = " + c.getId());
-        System.out.println("=== DEBUG: Participant 1 = " + c.getParticipantOne().getUsername());
-        List<Message> messages = c.getMessages();
-        Message lastMessage = messages.isEmpty() ? null : messages.get(messages.size() - 1);
+        // Use repo query instead of c.getMessages() to avoid LazyInitializationException
+        // on freshly-saved entities where the Hibernate proxy is not yet initialized.
+        Message lastMessage = null;
+        int unreadCount = 0;
+        try {
+            List<Message> messages = messageRepository.findByConversationIdOrderBySentAtAsc(c.getId());
+            if (messages != null && !messages.isEmpty()) {
+                lastMessage = messages.get(messages.size() - 1);
+            }
+            unreadCount = messageRepository.countUnreadInConversation(c.getId(), currentUserId);
+        } catch (Exception e) {
+            log.warn("Could not load messages for conversation {}: {}", c.getId(), e.getMessage());
+        }
 
         return ConversationResponseDTO.builder()
                 .id(c.getId())
                 .participantOneId(c.getParticipantOne().getId())
                 .participantOneUsername(c.getParticipantOne().getUsername())
-                .participantOneRole(c.getParticipantOne().getRole().name())
+                .participantOneRole(c.getParticipantOne().getRole() != null
+                        ? c.getParticipantOne().getRole().name() : "UNKNOWN")
                 .participantTwoId(c.getParticipantTwo().getId())
                 .participantTwoUsername(c.getParticipantTwo().getUsername())
-                .participantTwoRole(c.getParticipantTwo().getRole().name())
+                .participantTwoRole(c.getParticipantTwo().getRole() != null
+                        ? c.getParticipantTwo().getRole().name() : "UNKNOWN")
                 .type(c.getType())
                 .referenceId(c.getReferenceId())
                 .referenceType(c.getReferenceType())
@@ -202,7 +255,7 @@ public class MessageService {
                 .lastMessageContent(lastMessage != null ? truncate(lastMessage.getContent(), 80) : null)
                 .lastMessageAt(lastMessage != null ? lastMessage.getSentAt() : null)
                 .lastMessageSender(lastMessage != null ? lastMessage.getSender().getUsername() : null)
-                .unreadCount(messageRepository.countUnreadInConversation(c.getId(), currentUserId))
+                .unreadCount(unreadCount)
                 .build();
     }
 

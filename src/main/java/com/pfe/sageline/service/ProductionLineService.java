@@ -1,7 +1,7 @@
 package com.pfe.sageline.service;
 
-import com.pfe.sageline.dtos.ProductionLineRequestDTO;
-import com.pfe.sageline.dtos.ProductionLineResponseDTO;
+import com.pfe.sageline.dtos.request.ProductionLineRequestDTO;
+import com.pfe.sageline.dtos.response.ProductionLineResponseDTO;
 import com.pfe.sageline.entity.ProductionLine;
 import com.pfe.sageline.mappers.ProductionLineMapper;
 import com.pfe.sageline.repository.ProductionLineRepository;
@@ -102,6 +102,15 @@ public class ProductionLineService {
         } else {
             return deactivateProductionLine(id);
         }
+    }
+    public List<ProductionLineResponseDTO> getLinesByPhase(Long phaseId) {
+        return productionLineRepository.findByPhaseId(phaseId).stream()
+                .map(productionLineMapper::toResponseDTO).toList();
+    }
+
+    public List<ProductionLineResponseDTO> getLinesBySecteur(Long secteurId) {
+        return productionLineRepository.findByPhaseSecteurId(secteurId).stream()
+                .map(productionLineMapper::toResponseDTO).toList();
     }
 
     public boolean existsByCode(String code) {

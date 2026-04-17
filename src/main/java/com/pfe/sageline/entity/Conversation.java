@@ -1,5 +1,6 @@
 package com.pfe.sageline.entity;
 
+import com.pfe.sageline.enums.ConversationType;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;

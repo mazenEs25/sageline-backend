@@ -1,10 +1,10 @@
-# CLAUDE.md
+/# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-SageLine is a Spring Boot 4.0.2 application for production line quality validation with AI-powered non-conformity prediction and KPI tracking. It uses PostgreSQL and integrates with an external Python ML service for predictions.
+SageLine is a Spring Boot 4.0.2 application for production line quality validation with AI-powered non-conformity prediction and KPI tracking. It uses PostgreSQL, Keycloak for authentication, and integrates with an external Python ML service.
 
 ## Build & Run Commands
 
@@ -25,43 +25,89 @@ SageLine is a Spring Boot 4.0.2 application for production line quality validati
 ## Prerequisites
 
 - Java 17
-- PostgreSQL database `sageLine_db` on localhost:5432 (user: postgres)
-- External Python ML service on `http://localhost:5000` (optional — AIPredictionService falls back gracefully)
+- PostgreSQL database `sageLine_db` on localhost:5432 (user: `postgres`, password: `123456`)
+- Keycloak on `http://localhost:8180`, realm `sageline`, client `admin-cli` (admin/admin)
+- External Python ML service on `http://localhost:5000` (optional — `AIPredictionService` falls back gracefully)
+- Frontend Angular app expected on `http://localhost:4200` (CORS allowed)
 
 ## Architecture
 
 **Layered architecture:** Controller → Service → Repository → Entity
 
 - **Package root:** `com.pfe.sageline`
-- **Controllers** (`controller/`): REST endpoints under `/api/` — validations, lines, users, kpis, validation-results, validation-zones
-- **Services** (`service/`): Business logic with `@Transactional`. Key services:
-  - `AIPredictionService` — calls Python ML service at `/predict`, calculates deviations, falls back to defaults if unavailable
-  - `KPIService` — conformity rate calculations, dashboard generation, auto-recalculates on validation closure
-  - `ValidationService` — orchestrates validation lifecycle (start → add results → close), triggers AI predictions and KPI updates
-- **Repositories** (`repository/`): Spring Data JPA with custom `@Query` methods (JPQL with LEFT JOIN FETCH for eager loading)
-- **Entities** (`entity/`): JPA entities with Lombok annotations (`@Data`, `@NoArgsConstructor`, `@AllArgsConstructor`)
-- **DTOs** (`dtos/`): Request/Response DTOs for all API contracts
-- **Mappers** (`mappers/`): Manual entity ↔ DTO conversion classes
-- **Exception** (`exception/`): `GlobalExceptionHandler` (`@RestControllerAdvice`) maps exceptions to structured error responses
-- **Config** (`Config/`): `SecurityConfig` — currently permits all requests, has commented-out `@PreAuthorize` role-based access
+- **Controllers** (`controller/`): REST endpoints under `/api/`
+- **Services** (`service/`): Business logic with `@Transactional`
+- **Repositories** (`repository/`): Spring Data JPA with custom `@Query` methods (JPQL with `LEFT JOIN FETCH` for eager loading)
+- **Entities** (`entity/`): JPA entities with Lombok (`@Data`, `@NoArgsConstructor`, `@AllArgsConstructor`, `@Builder`)
+- **DTOs** (`dtos/request/` and `dtos/response/`): Separated request and response DTOs
+- **Mappers** (`mappers/`): Manual entity ↔ DTO conversion
+- **Exception** (`exception/`): `GlobalExceptionHandler` (`@RestControllerAdvice`) — throws `ResourceNotFoundException` (404) and `ValidationException` (400)
+- **Config** (`Config/`): Security, Keycloak, WebSocket
+
+## Security & Authentication
+
+Authentication is fully wired via Keycloak OAuth2 JWT:
+
+- `KeycloakJwtConverter` — extracts `realm_access.roles` from JWT and maps them to `ROLE_<name>` Spring authorities
+- `SecurityUtils` — component for getting current user from JWT (`getCurrentUserId()`, `getCurrentUsername()`, `getCurrentRoles()`). `getCurrentUserId()` looks up the DB user by `keycloakId` (Keycloak UUID sub claim). Call `GET /api/users/me` first to sync a new Keycloak user into the DB.
+- `KeycloakAdminConfig` — provides a `Keycloak` admin client bean for user management via Keycloak Admin REST API
+- CORS is configured for `http://localhost:4200` only
+
+**Role hierarchy** (from `Role` enum): `ADMIN_IT`, `EXPERT`, `CHEF_SECTEUR`, `TECH_PREP`, `TECH_VAL`, `RESPONSABLE`
 
 ## Data Model
 
-Core entity relationships:
-- **ProductionLine** → has many **ValidationZone**s and **KPI**s
-- **ValidationZone** → has many **Validation**s
-- **Validation** → has many **ValidationResult**s, has one **NonConformityPrediction**
-- **User** → belongs to one **ProductionLine**, has a **Role** enum (ADMIN_IT, EXPERT, CHEF_SECTEUR, TECH_PREP, TECH_VAL, RESPONSABLE)
-- **ValidationStatus** enum: EN_COURS, CONFORME, NON_CONFORME
+```
+ProductionLine → Secteur → Phase
+ProductionLine → ValidationZone → Validation (ticket)
+Validation → ValidationResult, ValidationAssignment, NonConformityPrediction
+User → ProductionLine (belongs to)
+Conversation → Message
+```
 
-## API Documentation
+- **Validation** is the core ticket entity. Uses `TicketStatus` (not the old `ValidationStatus`). Auto-generates a `ticketCode` (e.g. `VAL-2026-0001`) via `TicketCodeGenerator`.
+- **ValidationAssignment** links users to a validation ticket with an `AssignmentStatus`.
+- **AnomalyDetection** and **ToolRecommendation** are standalone AI-output entities.
+- **Notification** and **Conversation/Message** support the real-time messaging feature.
 
-Swagger UI is available via SpringDoc OpenAPI at the default `/swagger-ui.html` endpoint when the app is running.
+### Ticket Workflow (`TicketStatus` enum)
+
+```
+PLANIFIE → EN_PREP → PRET → EN_COURS → EN_REVUE → CONFORME | NON_CONFORME | ANNULE
+```
+
+Workflow transitions (controller endpoints, role-gated):
+- `PATCH /api/validations/{id}/start-prep` — TECH_PREP or ADMIN_IT
+- `PATCH /api/validations/{id}/validate-prep` — TECH_PREP or ADMIN_IT
+- `PATCH /api/validations/{id}/start` — TECH_VAL or ADMIN_IT
+- `PATCH /api/validations/{id}/submit-review` — TECH_VAL or ADMIN_IT
+- `PATCH /api/validations/{id}/close` — CHEF_SECTEUR, EXPERT, or ADMIN_IT
+- `PATCH /api/validations/{id}/cancel` — CHEF_SECTEUR or ADMIN_IT
+
+## Key Services
+
+- `AIPredictionService` — calls Python ML service at `/predict`, calculates deviations, falls back to defaults if unavailable
+- `KPIService` — conformity rate calculations, dashboard generation, auto-recalculates on validation closure
+- `ValidationService` — orchestrates the full ticket lifecycle, triggers AI predictions and KPI updates
+- `AnomalyDetectionService` / `ToolRecommendationService` — AI-output management
+- `NotificationService` — creates and pushes notifications over WebSocket
+
+## WebSocket
+
+- Config in `WebSocketConfig`: STOMP broker at `/ws`, app prefix `/app`, topic prefix `/topic`
+- `WebSocketEventListener` handles connect/disconnect
+- `WebSocketController` handles messaging endpoints under `/app/`
+- Notifications pushed server-side via `SimpMessagingTemplate`
 
 ## Key Patterns
 
 - All entities use Lombok — no manual getters/setters
-- Services throw `ResourceNotFoundException` (404) and `ValidationException` (400)
-- Repository queries use JPQL with `LEFT JOIN FETCH` to avoid N+1 problems
+- DTOs split into `dtos/request/` and `dtos/response/` packages
 - `application.properties` has `spring.jpa.hibernate.ddl-auto=update` (auto-schema migration)
-- SQL logging is enabled (`spring.jpa.show-sql=true`)
+- SQL logging is enabled (`spring.jpa.show-sql=true`, `hibernate.format_sql=true`)
+- Repository queries use JPQL with `LEFT JOIN FETCH` to avoid N+1 problems
+- `@PreAuthorize` annotations on controller methods are the primary access control — `SecurityConfig` URL rules are a secondary layer
+
+## API Documentation
+
+Swagger UI: `http://localhost:8089/swagger-ui.html` (public, no auth required)

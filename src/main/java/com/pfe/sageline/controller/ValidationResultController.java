@@ -1,7 +1,7 @@
 package com.pfe.sageline.controller;
 
-import com.pfe.sageline.dtos.ValidationResultRequestDTO;
-import com.pfe.sageline.dtos.ValidationResultResponseDTO;
+import com.pfe.sageline.dtos.request.ValidationResultRequestDTO;
+import com.pfe.sageline.dtos.response.ValidationResultResponseDTO;
 import com.pfe.sageline.service.ValidationResultService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,7 +24,7 @@ public class ValidationResultController {
     private final ValidationResultService validationResultService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL')")
     @Operation(summary = "Récupérer tous les résultats de validation")
     public ResponseEntity<List<ValidationResultResponseDTO>> getAllResults() {
         List<ValidationResultResponseDTO> results = validationResultService.getAllValidationResults();
@@ -32,7 +32,7 @@ public class ValidationResultController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALN')")
     @Operation(summary = "Récupérer un résultat par ID")
     public ResponseEntity<ValidationResultResponseDTO> getResultById(@PathVariable Long id) {
         ValidationResultResponseDTO result = validationResultService.getValidationResultById(id);
@@ -40,7 +40,7 @@ public class ValidationResultController {
     }
 
     @GetMapping("/validation/{validationId}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL')")
     @Operation(summary = "Récupérer les résultats d'une validation")
     public ResponseEntity<List<ValidationResultResponseDTO>> getResultsByValidation(@PathVariable Long validationId) {
         List<ValidationResultResponseDTO> results = validationResultService.getResultsByValidation(validationId);
@@ -66,7 +66,7 @@ public class ValidationResultController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('TECH_VALIDATION', 'CHEF_SECTEUR')")
+    @PreAuthorize("hasAnyRole('TECH_VAL', 'CHEF_SECTEUR')")
     @Operation(summary = "Créer un nouveau résultat de validation")
     public ResponseEntity<ValidationResultResponseDTO> createResult(@Valid @RequestBody ValidationResultRequestDTO request) {
         ValidationResultResponseDTO result = validationResultService.addValidationResult(request);
@@ -74,7 +74,7 @@ public class ValidationResultController {
     }
 
     @PostMapping("/batch")
-    @PreAuthorize("hasAnyRole('TECH_VALIDATION', 'CHEF_SECTEUR')")
+    @PreAuthorize("hasAnyRole('TECH_VAL', 'CHEF_SECTEUR')")
     @Operation(summary = "Créer plusieurs résultats de validation en une fois")
     public ResponseEntity<List<ValidationResultResponseDTO>> createResultsBatch(
             @Valid @RequestBody List<ValidationResultRequestDTO> requests) {
@@ -83,7 +83,7 @@ public class ValidationResultController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('TECH_VALIDATION', 'CHEF_SECTEUR')")
+    @PreAuthorize("hasAnyRole('TECH_VAL', 'CHEF_SECTEUR')")
     @Operation(summary = "Modifier un résultat de validation")
     public ResponseEntity<ValidationResultResponseDTO> updateResult(
             @PathVariable Long id,
@@ -101,7 +101,7 @@ public class ValidationResultController {
     }
 
     @GetMapping("/validation/{validationId}/non-conform/count")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL')")
     @Operation(summary = "Compter les résultats non conformes d'une validation")
     public ResponseEntity<Long> countNonConformResults(@PathVariable Long validationId) {
         Long count = validationResultService.countNonConformByValidation(validationId);

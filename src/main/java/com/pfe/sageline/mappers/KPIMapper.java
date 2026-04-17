@@ -1,6 +1,6 @@
 package com.pfe.sageline.mappers;
 
-import com.pfe.sageline.dtos.KPIResponse;
+import com.pfe.sageline.dtos.response.KPIResponse;
 import com.pfe.sageline.entity.KPI;
 import org.springframework.stereotype.Component;
 

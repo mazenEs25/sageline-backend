@@ -2,8 +2,8 @@ package com.pfe.sageline.controller;
 
 
 import com.pfe.sageline.Config.SecurityUtils;
-import com.pfe.sageline.dtos.UserRequestDTO;
-import com.pfe.sageline.dtos.UserResponseDTO;
+import com.pfe.sageline.dtos.request.UserRequestDTO;
+import com.pfe.sageline.dtos.response.UserResponseDTO;
 import com.pfe.sageline.entity.User;
 import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.mappers.UserMapper;
@@ -13,15 +13,19 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
@@ -36,7 +40,7 @@ public class UserController {
     private SecurityUtils securityUtils;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR','EXPERT', 'TECH_VAL', 'TECH_PREP', 'RESPONSABLE')")
     @Operation(summary = "Récupérer tous les utilisateurs")
     public ResponseEntity<List<UserResponseDTO>> getAllUsers() {
         List<UserResponseDTO> users = userService.getAllUsers();
@@ -44,7 +48,7 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR','EXPERT', 'TECH_VAL', 'TECH_PREP', 'RESPONSABLE')")
     @Operation(summary = "Récupérer un utilisateur par ID")
     public ResponseEntity<UserResponseDTO> getUserById(@PathVariable Long id) {
         UserResponseDTO user = userService.getUserById(id);
@@ -52,18 +56,18 @@ public class UserController {
     }
 
     @GetMapping("/username/{username}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR','EXPERT', 'TECH_VAL', 'TECH_PREP', 'RESPONSABLE')")
     @Operation(summary = "Récupérer un utilisateur par username")
     public ResponseEntity<UserResponseDTO> getUserByUsername(@PathVariable String username) {
         UserResponseDTO user = userService.getUserByUsername(username);
         return ResponseEntity.ok(user);
     }
 
-    @GetMapping("/line/{lineId}")
+    @GetMapping("/secteur/{secteurId}")
     @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")
-    @Operation(summary = "Récupérer les utilisateurs d'une ligne de production")
-    public ResponseEntity<List<UserResponseDTO>> getUsersByProductionLine(@PathVariable Long lineId) {
-        List<UserResponseDTO> users = userService.getUsersByProductionLine(lineId);
+    @Operation(summary = "Récupérer les utilisateurs d'un secteur")
+    public ResponseEntity<List<UserResponseDTO>> getUsersBySecteur(@PathVariable Long secteurId) {
+        List<UserResponseDTO> users = userService.getUsersBySecteur(secteurId);
         return ResponseEntity.ok(users);
     }
 
@@ -108,12 +112,63 @@ public class UserController {
         boolean exists = userService.existsByEmail(email);
         return ResponseEntity.ok(exists);
     }
+    @GetMapping("/messaging-contacts")
+    @Operation(summary = "Récupérer tous les utilisateurs disponibles pour la messagerie (hors soi-même)")
+    public ResponseEntity<List<UserResponseDTO>> getMessagingContacts() {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        List<UserResponseDTO> contacts = userService.getAllUsers().stream()
+                .filter(u -> !u.getId().equals(currentUserId))
+                .toList();
+        return ResponseEntity.ok(contacts);
+    }
+
     @GetMapping("/me")
-    public ResponseEntity<UserResponseDTO> getCurrentUser() {
-        String username = securityUtils.getCurrentUsername();
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "username", username));
-        return ResponseEntity.ok(userMapper.toResponseDTO(user));
+    public ResponseEntity<?> getCurrentUser() {
+        try {
+            Long userId = securityUtils.getCurrentUserId();
+            return ResponseEntity.ok(userService.getUserById(userId));
+        } catch (Exception e) {
+            // User exists in Keycloak but not in PostgreSQL
+            // Auto-create them from the JWT token
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            Jwt jwt = (Jwt) auth.getPrincipal();
+
+            String username = jwt.getClaimAsString("preferred_username");
+            String email = jwt.getClaimAsString("email");
+            String firstName = jwt.getClaimAsString("given_name");
+            String lastName = jwt.getClaimAsString("family_name");
+            String keycloakId = jwt.getSubject();
+
+            // Extract role from realm_access
+            String role = "TECH_VAL"; // default
+            var realmAccess = jwt.getClaimAsMap("realm_access");
+            if (realmAccess != null) {
+                var roles = (java.util.List<String>) realmAccess.get("roles");
+                if (roles != null) {
+                    for (String r : roles) {
+                        if (r.equals("ADMIN_IT") || r.equals("CHEF_SECTEUR") ||
+                                r.equals("EXPERT") || r.equals("TECH_VAL") ||
+                                r.equals("TECH_PREP") || r.equals("RESPONSABLE")) {
+                            role = r;
+                            break;
+                        }
+                    }
+                }
+            }
+            // Create user in PostgreSQL
+            User newUser = User.builder()
+                    .username(username)
+                    .email(email != null ? email : username + "@sageline.com")
+                    .firstName(firstName)
+                    .lastName(lastName)
+                    .keycloakId(keycloakId)
+                    .role(com.pfe.sageline.enums.Role.valueOf(role))
+                    .build();
+
+            newUser = userRepository.save(newUser);
+
+            return ResponseEntity.ok(userMapper.toResponseDTO(newUser));
+        }
     }
 
 }

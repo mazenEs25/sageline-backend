@@ -1,8 +1,8 @@
 package com.pfe.sageline.controller;
 
 
-import com.pfe.sageline.dtos.ValidationZoneRequestDTO;
-import com.pfe.sageline.dtos.ValidationZoneResponseDTO;
+import com.pfe.sageline.dtos.request.ValidationZoneRequestDTO;
+import com.pfe.sageline.dtos.response.ValidationZoneResponseDTO;
 import com.pfe.sageline.service.ValidationZoneService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,7 +25,7 @@ public class ValidationZoneController {
     private final ValidationZoneService validationZoneService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL','TECH_PREP')")
     @Operation(summary = "Récupérer toutes les zones de validation")
     public ResponseEntity<List<ValidationZoneResponseDTO>> getAllZones() {
         List<ValidationZoneResponseDTO> zones = validationZoneService.getAllValidationZones();
@@ -33,7 +33,7 @@ public class ValidationZoneController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL','TECH_PREP')")
     @Operation(summary = "Récupérer une zone par ID")
     public ResponseEntity<ValidationZoneResponseDTO> getZoneById(@PathVariable Long id) {
         ValidationZoneResponseDTO zone = validationZoneService.getValidationZoneById(id);
@@ -41,7 +41,7 @@ public class ValidationZoneController {
     }
 
     @GetMapping("/line/{lineId}")
-    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VALIDATION')")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL','TECH_PREP')")
     @Operation(summary = "Récupérer les zones d'une ligne de production")
     public ResponseEntity<List<ValidationZoneResponseDTO>> getZonesByLine(@PathVariable Long lineId) {
         List<ValidationZoneResponseDTO> zones = validationZoneService.getValidationZonesByProductionLine(lineId);

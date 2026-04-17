@@ -1,6 +1,6 @@
 package com.pfe.sageline.dtos;
 
-import com.pfe.sageline.entity.ToolStatus;
+import com.pfe.sageline.enums.ToolStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

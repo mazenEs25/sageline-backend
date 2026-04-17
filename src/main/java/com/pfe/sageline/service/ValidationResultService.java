@@ -1,10 +1,10 @@
 package com.pfe.sageline.service;
 
-import com.pfe.sageline.dtos.ValidationResultRequestDTO;
-import com.pfe.sageline.dtos.ValidationResultResponseDTO;
+import com.pfe.sageline.dtos.request.ValidationResultRequestDTO;
+import com.pfe.sageline.dtos.response.ValidationResultResponseDTO;
 import com.pfe.sageline.entity.Validation;
 import com.pfe.sageline.entity.ValidationResult;
-import com.pfe.sageline.entity.ValidationStatus;
+import com.pfe.sageline.enums.TicketStatus;
 import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.mappers.ValidationResultMapper;
 import com.pfe.sageline.repository.ValidationRepository;
@@ -25,7 +25,7 @@ public class ValidationResultService {
     private final ValidationResultRepository validationResultRepository;
     private final ValidationRepository validationRepository;
     private final ValidationResultMapper validationResultMapper;
-    private final ValidationService validationService;  // ← NOUVEAU
+    private final AIPredictionService aiPredictionService;
 
     /**
      * Ajouter un résultat à une validation
@@ -40,7 +40,7 @@ public class ValidationResultService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Validation not found with id: " + requestDTO.getValidationId()));
 
-        if (validation.getStatus() != ValidationStatus.EN_COURS) {
+        if (validation.getStatus() != TicketStatus.EN_COURS) {
             throw new RuntimeException("Cannot add results to a closed validation");
         }
 
@@ -49,9 +49,8 @@ public class ValidationResultService {
 
         ValidationResult savedResult = validationResultRepository.save(result);
 
-        // ✅ METTRE À JOUR LA PRÉDICTION IA APRÈS CHAQUE AJOUT DE RÉSULTAT
         try {
-            validationService.updateValidationWithResults(validation.getId());
+            aiPredictionService.predictNonConformity(validation);
             log.info("AI prediction updated after adding result");
         } catch (Exception e) {
             log.warn("Could not update AI prediction: {}", e.getMessage());
@@ -78,7 +77,7 @@ public class ValidationResultService {
                             .orElseThrow(() -> new ResourceNotFoundException(
                                     "Validation not found with id: " + dto.getValidationId()));
 
-                    if (validation.getStatus() != ValidationStatus.EN_COURS) {
+                    if (validation.getStatus() != TicketStatus.EN_COURS) {
                         throw new RuntimeException("Cannot add results to a closed validation");
                     }
 
@@ -90,11 +89,12 @@ public class ValidationResultService {
                 })
                 .collect(Collectors.toList());
 
-        // ✅ METTRE À JOUR LA PRÉDICTION IA UNE SEULE FOIS APRÈS TOUT LE BATCH
         if (!requestDTOs.isEmpty()) {
             Long validationId = requestDTOs.get(0).getValidationId();
             try {
-                validationService.updateValidationWithResults(validationId);
+                Validation v = validationRepository.findById(validationId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Validation not found"));
+                aiPredictionService.predictNonConformity(v);
                 log.info("AI prediction updated after batch insert");
             } catch (Exception e) {
                 log.warn("Could not update AI prediction: {}", e.getMessage());
@@ -152,7 +152,7 @@ public class ValidationResultService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Validation result not found with id: " + id));
 
-        if (result.getValidation().getStatus() != ValidationStatus.EN_COURS) {
+        if (result.getValidation().getStatus() != TicketStatus.EN_COURS) {
             throw new RuntimeException("Cannot delete results from a closed validation");
         }
 
@@ -190,7 +190,7 @@ public class ValidationResultService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Validation result not found with id: " + id));
 
-        if (result.getValidation().getStatus() != ValidationStatus.EN_COURS) {
+        if (result.getValidation().getStatus() != TicketStatus.EN_COURS) {
             throw new RuntimeException("Cannot update results of a closed validation");
         }
 
