@@ -106,11 +106,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/validations/**")
                         .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
 
-                        // Validation results: TECH_VALIDATION and above
+                        // Validation results: TECH_VAL and above
                         .requestMatchers(HttpMethod.POST, "/api/validation-results/**")
-                        .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "TECH_VALIDATION")
+                        .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "TECH_VAL")
                         .requestMatchers(HttpMethod.DELETE, "/api/validation-results/**")
-                        .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "TECH_VALIDATION")
+                        .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "TECH_VAL")
 
 
 

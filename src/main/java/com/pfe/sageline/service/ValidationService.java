@@ -11,6 +11,7 @@ import com.pfe.sageline.mappers.ValidationMapper;
 import com.pfe.sageline.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
@@ -33,6 +34,7 @@ public class ValidationService {
     private final AIPredictionService aiPredictionService;
     private final KPIService kpiService;
     private final MessagingEventService messagingEventService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     // ========================
     // CRUD
@@ -156,6 +158,8 @@ public class ValidationService {
         log.info("Ticket créé: {} pour zone {} par {}",
                 ticketCode, zone.getName(), createdBy.getUsername());
 
+        broadcastTicketUpdate(validation);
+
         return validationMapper.toResponseDTO(validation);
     }
 
@@ -188,6 +192,8 @@ public class ValidationService {
         } catch (Exception e) {
             log.warn("Notification échouée: {}", e.getMessage());
         }
+
+        broadcastTicketUpdate(validation);
 
         log.info("Ticket {} → EN_ATTENTE_PREP", validation.getTicketCode());
         return validationMapper.toResponseDTO(validation);
@@ -238,6 +244,8 @@ public class ValidationService {
             log.warn("Notification échouée: {}", e.getMessage());
         }
 
+        broadcastTicketUpdate(validation);
+
         return validationMapper.toResponseDTO(validation);
     }
 
@@ -272,6 +280,8 @@ public class ValidationService {
         } catch (Exception e) {
             log.warn("Notification échouée: {}", e.getMessage());
         }
+
+        broadcastTicketUpdate(validation);
 
         log.info("Ticket {} → EN_COURS", validation.getTicketCode());
         return validationMapper.toResponseDTO(findValidationOrThrow(id));
@@ -310,6 +320,8 @@ public class ValidationService {
             log.warn("Notification échouée: {}", e.getMessage());
         }
 
+        broadcastTicketUpdate(validation);
+
         log.info("Ticket {} → EN_REVUE", validation.getTicketCode());
         return validationMapper.toResponseDTO(findValidationOrThrow(id));
     }
@@ -339,6 +351,8 @@ public class ValidationService {
             log.warn("Recalcul KPIs échoué: {}", e.getMessage());
         }
 
+        broadcastTicketUpdate(validation);
+
         log.info("Ticket {} → {} (cloturé)", validation.getTicketCode(), finalStatus);
         return validationMapper.toResponseDTO(findValidationOrThrow(id));
     }
@@ -367,6 +381,8 @@ public class ValidationService {
             log.warn("Notification annulation échouée: {}", e.getMessage());
         }
 
+        broadcastTicketUpdate(validation);
+
         log.info("Ticket {} → ANNULE: {}", validation.getTicketCode(), reason);
         return validationMapper.toResponseDTO(validation);
     }
@@ -374,6 +390,25 @@ public class ValidationService {
     // ========================
     // HELPERS
     // ========================
+
+    /**
+     * Broadcast a fresh ticket DTO over WebSocket so every open session
+     * (chef_secteur, tech_val, tech_prep) refreshes in real time.
+     *
+     * - /topic/tickets.{id}  → for ticket-detail subscribers
+     * - /topic/tickets       → for ticket-list subscribers
+     */
+    private void broadcastTicketUpdate(Validation validation) {
+        if (validation == null || validation.getId() == null) return;
+        try {
+            ValidationResponseDTO dto = validationMapper.toResponseDTO(validation);
+            messagingTemplate.convertAndSend("/topic/tickets." + validation.getId(), dto);
+            messagingTemplate.convertAndSend("/topic/tickets", dto);
+        } catch (Exception e) {
+            log.warn("Broadcast ticket échoué pour {}: {}",
+                    validation.getTicketCode(), e.getMessage());
+        }
+    }
 
     private Validation findValidationOrThrow(Long id) {
         return validationRepository.findById(id)

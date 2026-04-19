@@ -1,11 +1,8 @@
 package com.pfe.sageline.controller;
-
-
 import com.pfe.sageline.Config.SecurityUtils;
 import com.pfe.sageline.dtos.request.UserRequestDTO;
 import com.pfe.sageline.dtos.response.UserResponseDTO;
 import com.pfe.sageline.entity.User;
-import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.mappers.UserMapper;
 import com.pfe.sageline.repository.UserRepository;
 import com.pfe.sageline.service.UserService;

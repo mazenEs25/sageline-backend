@@ -10,8 +10,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ValidationResultResponseDTO {
-    
+
     private Long id;
+    private Long validationId;
     private String parameter;
     private Double measuredValue;
     private Double expectedValue;

@@ -15,12 +15,16 @@ public class ValidationResultMapper {
         
         ValidationResultResponseDTO dto = new ValidationResultResponseDTO();
         dto.setId(result.getId());
+        // Expose the parent validation's id so the frontend can filter / export per-ticket
+        if (result.getValidation() != null) {
+            dto.setValidationId(result.getValidation().getId());
+        }
         dto.setParameter(result.getParameter());
         dto.setMeasuredValue(result.getMeasuredValue());
         dto.setExpectedValue(result.getExpectedValue());
         dto.setConform(result.getConform());
         dto.setCreatedAt(result.getCreatedAt());
-        
+
         return dto;
     }
     
