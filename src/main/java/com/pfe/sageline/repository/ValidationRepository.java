@@ -41,8 +41,19 @@ public interface ValidationRepository extends JpaRepository<Validation,Long> {
     List<Validation> findByPlannedDateBetween(
             @Param("start") LocalDate start, @Param("end") LocalDate end);
 
-    @Query("SELECT v FROM Validation v WHERE v.plannedWeekStart <= :date AND v.plannedWeekEnd >= :date")
-    List<Validation> findByPlannedWeek(@Param("date") LocalDate date);
+    /**
+     * Returns every validation planned inside the week [weekStart, weekEnd] (inclusive).
+     * We filter by {@code plannedDate} instead of {@code plannedWeekStart/End} so that tickets
+     * created through the single-ticket flow (which doesn't set the week range fields) also
+     * show up on the weekly planner board.
+     */
+    @Query("SELECT v FROM Validation v " +
+            "WHERE v.plannedDate BETWEEN :weekStart AND :weekEnd " +
+            "   OR (v.plannedWeekStart IS NOT NULL AND v.plannedWeekEnd IS NOT NULL " +
+            "       AND v.plannedWeekStart <= :weekEnd AND v.plannedWeekEnd >= :weekStart)")
+    List<Validation> findByPlannedWeek(
+            @Param("weekStart") LocalDate weekStart,
+            @Param("weekEnd") LocalDate weekEnd);
 
     @Query("SELECT v FROM Validation v " +
             "JOIN v.validationZone z " +

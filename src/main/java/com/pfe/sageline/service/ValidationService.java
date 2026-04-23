@@ -14,8 +14,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -82,7 +84,13 @@ public class ValidationService {
     }
 
     public List<ValidationResponseDTO> getTicketsByWeek(LocalDate date) {
-        return validationRepository.findByPlannedWeek(date).stream()
+        // Normalize any day in the week to Monday → Sunday so the planner always
+        // returns every ticket planned that calendar week, regardless of which
+        // day the caller passed.
+        LocalDate weekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate weekEnd = weekStart.plusDays(6);
+        log.debug("getTicketsByWeek: week {} → {}", weekStart, weekEnd);
+        return validationRepository.findByPlannedWeek(weekStart, weekEnd).stream()
                 .map(validationMapper::toResponseDTO)
                 .toList();
     }
