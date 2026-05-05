@@ -19,6 +19,12 @@ public class ValidationResultMapper {
         if (result.getValidation() != null) {
             dto.setValidationId(result.getValidation().getId());
         }
+        // Expose the per-poste link (2026-04 line-ticket model) so the UI
+        // can group results by poste and show per-poste counts.
+        if (result.getZone() != null) {
+            dto.setZoneId(result.getZone().getId());
+            dto.setZoneName(result.getZone().getName());
+        }
         dto.setParameter(result.getParameter());
         dto.setMeasuredValue(result.getMeasuredValue());
         dto.setExpectedValue(result.getExpectedValue());

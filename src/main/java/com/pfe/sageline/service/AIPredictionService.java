@@ -46,8 +46,28 @@ public class AIPredictionService {
             double avgDeviation = calculateAvgDeviation(validation);
             double maxDeviation = calculateMaxDeviation(validation);
 
-            Long zoneId = validation.getValidationZone().getId();
-            Long lineId = validation.getValidationZone().getProductionLine().getId();
+            // 2026-04 line-ticket model: prefer the direct productionLine FK,
+            // fall back to the legacy validationZone.productionLine chain for
+            // unmigrated rows. Either is enough to compute the AI features —
+            // we only send zoneId if we have one (Python service handles null).
+            Long zoneId = null;
+            Long lineId = null;
+
+            if (validation.getValidationZone() != null) {
+                zoneId = validation.getValidationZone().getId();
+                if (validation.getValidationZone().getProductionLine() != null) {
+                    lineId = validation.getValidationZone().getProductionLine().getId();
+                }
+            }
+            if (lineId == null && validation.getProductionLine() != null) {
+                lineId = validation.getProductionLine().getId();
+            }
+
+            if (lineId == null) {
+                log.warn("AI prediction: validation {} has neither productionLine nor validationZone.productionLine — returning default prediction",
+                        validation.getId());
+                return createDefaultPrediction(validation);
+            }
 
             // Appeler le service Python
             NonConformityPredictionResponseDTO predictionDTO = callPythonService(

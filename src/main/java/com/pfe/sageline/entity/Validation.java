@@ -31,9 +31,22 @@ public class Validation {
     @Builder.Default
     private TicketStatus status = TicketStatus.PLANIFIE;
 
-    // ===== EXISTING: Zone relationship (unchanged) =====
+    // ===== LINE-LEVEL TICKET (new canonical relationship) =====
+    // Since 2026-04, one ticket = one production line. Postes live in
+    // `posteStatuses` below (ValidationPosteStatus sub-entity).
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "validation_zone_id", nullable = false)
+    @JoinColumn(name = "production_line_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private ProductionLine productionLine;
+
+    // ===== LEGACY: Zone relationship — now nullable =====
+    // Kept for backward compat with AI prediction, KPI queries and the
+    // legacy zone-scoped dashboards. For new tickets we populate it with the
+    // first poste of the line so the existing code keeps working while we
+    // migrate the call-sites one by one.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "validation_zone_id")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private ValidationZone validationZone;
@@ -105,6 +118,14 @@ public class Validation {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private List<ValidationAssignment> assignments = new ArrayList<>();
+
+    // ===== NEW: Per-poste sub-status rows (one per required poste of the line) =====
+    @OneToMany(mappedBy = "validation", cascade = CascadeType.ALL, orphanRemoval = true,
+            fetch = FetchType.LAZY)
+    @Builder.Default
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private List<ValidationPosteStatus> posteStatuses = new ArrayList<>();
 
     // ===== EXISTING: AI Prediction (unchanged) =====
     @OneToOne(mappedBy = "validation", cascade = CascadeType.ALL, fetch = FetchType.LAZY)

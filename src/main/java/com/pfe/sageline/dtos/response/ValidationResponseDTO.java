@@ -75,6 +75,17 @@ public class ValidationResponseDTO {
     // Assignments
     private List<ValidationAssignmentResponseDTO> assignments;
 
+    // ===== NEW (2026-04): Per-poste sub-statuses =====
+    // One row per required poste of the line. Ordered by ValidationPosteStatus.orderInLine.
+    private List<PosteStatusDTO> posteStatuses;
+
+    // Aggregates over posteStatuses — nice for list views that don't want to
+    // re-iterate the collection on the client side.
+    private int posteTotal;
+    private int posteDone;      // CONFORME + NON_CONFORME
+    private int posteConforme;
+    private int posteNonConforme;
+
     // Timestamps
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

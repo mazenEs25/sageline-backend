@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -29,6 +30,9 @@ public class ValidationService {
 
     private final ValidationRepository validationRepository;
     private final ValidationZoneRepository zoneRepository;
+    private final ProductionLineRepository productionLineRepository;
+    private final ValidationPosteStatusRepository posteStatusRepository;
+    private final ValidationResultRepository validationResultRepository;
     private final UserRepository userRepository;
     private final ValidationAssignmentRepository assignmentRepository;
     private final ValidationMapper validationMapper;
@@ -106,27 +110,136 @@ public class ValidationService {
     // TICKET CREATION
     // ========================
 
+    /**
+     * Create a line-level ticket (2026-04 Sagemcom model).
+     *
+     * <p>One ticket covers an entire {@link ProductionLine}. Every required
+     * poste (ValidationZone) of that line gets its own
+     * {@link ValidationPosteStatus} sub-row so different technicians can close
+     * different postes independently. The legacy single-zone ({@code
+     * validationZone}) FK is populated with the line's first poste so that
+     * {@code AIPredictionService} and zone-scoped KPI queries keep working
+     * while the frontend migrates.
+     */
     public ValidationResponseDTO createTicket(TicketCreateRequestDTO dto, Long createdByUserId) {
-        ValidationZone zone = zoneRepository.findById(dto.getValidationZoneId())
-                .orElseThrow(() -> new ResourceNotFoundException("Zone non trouvée"));
+        // --- 1. Resolve line (canonical) -------------------------------------
+        if (dto.getProductionLineId() == null) {
+            throw new ValidationException("La ligne de production est obligatoire");
+        }
+        ProductionLine line = productionLineRepository.findById(dto.getProductionLineId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Ligne non trouvée: " + dto.getProductionLineId()));
+
+        // --- 2. Load every poste of the line, ordered -----------------------
+        List<ValidationZone> lineZones = zoneRepository.findByProductionLineId(line.getId())
+                .stream()
+                .sorted(Comparator.comparing(
+                        ValidationZone::getOrderInLine,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                    .thenComparing(ValidationZone::getId,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+
+        if (lineZones.isEmpty()) {
+            throw new ValidationException(
+                    "La ligne " + line.getCode() +
+                    " n'a aucun poste configuré — impossible de créer un ticket");
+        }
+
+        // --- 2b. Optional poste selection -----------------------------------
+        // If the client explicitly passes includedZoneIds, trim the line's
+        // postes to that subset. Null/empty preserves the default "include
+        // every poste" behaviour. Every requested id must belong to the line
+        // — cross-line ids are a client bug, not a silent no-op.
+        List<Long> requestedZoneIds = dto.getIncludedZoneIds();
+        List<ValidationZone> coveredZones;
+        if (requestedZoneIds != null && !requestedZoneIds.isEmpty()) {
+            java.util.Set<Long> allLineIds = lineZones.stream()
+                    .map(ValidationZone::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+            List<Long> foreign = requestedZoneIds.stream()
+                    .filter(id -> id != null && !allLineIds.contains(id))
+                    .toList();
+            if (!foreign.isEmpty()) {
+                throw new ValidationException(
+                        "Postes invalides pour la ligne " + line.getCode() + ": " + foreign);
+            }
+            java.util.Set<Long> requestedSet = new java.util.HashSet<>(requestedZoneIds);
+            coveredZones = lineZones.stream()
+                    .filter(z -> requestedSet.contains(z.getId()))
+                    .toList();
+            if (coveredZones.isEmpty()) {
+                throw new ValidationException(
+                        "Au moins un poste doit être inclus dans le ticket");
+            }
+            log.info("Ticket sur ligne {} — sous-ensemble de postes: {}/{}",
+                    line.getCode(), coveredZones.size(), lineZones.size());
+        } else {
+            coveredZones = lineZones;
+        }
+
+        // Primary zone = explicit client choice, or first of the covered set.
+        // When the user excluded the default first poste, fall back to the
+        // first *covered* one so legacy code paths don't point at an excluded
+        // zone.
+        final Long explicitZoneId = dto.getValidationZoneId();
+        ValidationZone primaryZone = coveredZones.stream()
+                .filter(z -> explicitZoneId != null && z.getId().equals(explicitZoneId))
+                .findFirst()
+                .orElse(coveredZones.get(0));
+
+        // --- 3. Prevent duplicate active line-tickets for the same week -----
+        LocalDate dupKey = dto.getPlannedWeekStart() != null
+                ? dto.getPlannedWeekStart()
+                : dto.getPlannedDate();
+        if (dupKey != null) {
+            LocalDate weekStart = dupKey.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            LocalDate weekEnd = weekStart.plusDays(6);
+            List<Validation> existing = validationRepository
+                    .findActiveByLineAndWeek(line.getId(), weekStart, weekEnd);
+            if (!existing.isEmpty()) {
+                Validation clash = existing.get(0);
+                throw new ValidationException(
+                        "Un ticket actif existe déjà pour la ligne " + line.getCode() +
+                        " sur la semaine du " + weekStart + " (" + clash.getTicketCode() + ")");
+            }
+        }
 
         User createdBy = userRepository.findById(createdByUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Utilisateur non trouvé"));
 
         String ticketCode = ticketCodeGenerator.generate();
 
-        Validation validation = validationMapper.toEntity(dto, zone, createdBy, ticketCode);
+        // --- 4. Persist the Validation header -------------------------------
+        Validation validation = validationMapper.toEntity(dto, line, primaryZone, createdBy, ticketCode);
         validation = validationRepository.save(validation);
 
-        // Create assignments if provided
+        // --- 5. Seed one ValidationPosteStatus per COVERED poste ------------
+        // Excluded postes (not in coveredZones) intentionally get no sub-row,
+        // so markPosteDone/closeTicket will never block on them.
+        for (ValidationZone z : coveredZones) {
+            ValidationPosteStatus row = ValidationPosteStatus.builder()
+                    .validation(validation)
+                    .zone(z)
+                    .status(TicketStatus.PLANIFIE)
+                    .orderInLine(z.getOrderInLine())
+                    .build();
+            posteStatusRepository.save(row);
+        }
+
+        // --- 6. Create assignments ------------------------------------------
         if (dto.getAssignments() != null && !dto.getAssignments().isEmpty()) {
             for (TicketCreateRequestDTO.TicketAssignmentDTO assignDto : dto.getAssignments()) {
                 User assignUser = userRepository.findById(assignDto.getUserId())
                         .orElseThrow(() -> new ResourceNotFoundException(
                                 "Utilisateur non trouvé: " + assignDto.getUserId()));
 
-                Long assignZoneId = assignDto.getZoneId() != null ?
-                        assignDto.getZoneId() : dto.getValidationZoneId();
+                // For a line-ticket, the assignment zone defaults to the primary
+                // poste. Clients can still pin an assignment to a specific poste
+                // by passing zoneId (same behaviour as before).
+                Long assignZoneId = assignDto.getZoneId() != null
+                        ? assignDto.getZoneId()
+                        : primaryZone.getId();
                 ValidationZone assignZone = zoneRepository.findById(assignZoneId)
                         .orElseThrow(() -> new ResourceNotFoundException("Zone non trouvée"));
 
@@ -153,6 +266,9 @@ public class ValidationService {
 
         // Notify each assigned user — each in its own try-catch so one failure
         // doesn't prevent the remaining technicians from being notified.
+        // MessagingEventService.onTicketAssignment dedupes per (user, ticket)
+        // so a tech assigned to several postes of the same line only sees one
+        // conversation / one notification (M2 group semantics).
         for (ValidationAssignment assignment : freshAssignments) {
             try {
                 messagingEventService.onTicketAssignment(assignment);
@@ -163,8 +279,9 @@ public class ValidationService {
             }
         }
 
-        log.info("Ticket créé: {} pour zone {} par {}",
-                ticketCode, zone.getName(), createdBy.getUsername());
+        log.info("Ticket créé: {} pour ligne {} ({}/{} postes) par {}",
+                ticketCode, line.getCode(), coveredZones.size(), lineZones.size(),
+                createdBy.getUsername());
 
         broadcastTicketUpdate(validation);
 
@@ -335,7 +452,12 @@ public class ValidationService {
     }
 
     /**
-     * CHEF_SECTEUR/EXPERT closes the ticket → CONFORME or NON_CONFORME
+     * CHEF_SECTEUR/EXPERT closes the line-ticket → CONFORME or NON_CONFORME.
+     *
+     * <p>Safety rule: the ticket can only be closed when every
+     * {@link ValidationPosteStatus} row is terminal (CONFORME or NON_CONFORME).
+     * Tickets migrated from the pre-2026-04 model have zero poste rows and
+     * keep the legacy behaviour (close with the global final status only).
      */
     public ValidationResponseDTO closeTicket(Long id, TicketCloseRequestDTO dto) {
         Validation validation = findValidationOrThrow(id);
@@ -346,23 +468,186 @@ public class ValidationService {
             throw new ValidationException("Le statut final doit être CONFORME ou NON_CONFORME");
         }
 
+        // Enforce: all postes must have reached a terminal state before we can
+        // close the parent ticket. This only fires for new-model tickets that
+        // actually have poste rows.
+        long totalPostes = posteStatusRepository.countByValidationId(id);
+        if (totalPostes > 0) {
+            long donePostes = posteStatusRepository.countByValidationIdAndStatusIn(
+                    id, List.of(TicketStatus.CONFORME, TicketStatus.NON_CONFORME));
+            if (donePostes < totalPostes) {
+                throw new ValidationException(
+                        "Impossible de clôturer le ticket " + validation.getTicketCode() +
+                        ": " + donePostes + "/" + totalPostes +
+                        " postes terminés. Tous les postes doivent être CONFORME ou NON_CONFORME.");
+            }
+            // If the chef left the finalStatus as CONFORME but at least one
+            // poste is NON_CONFORME, force the ticket to NON_CONFORME — a line
+            // can't pass if any of its postes failed.
+            long nonConformePostes = posteStatusRepository.countByValidationIdAndStatus(
+                    id, TicketStatus.NON_CONFORME);
+            if (nonConformePostes > 0 && finalStatus == TicketStatus.CONFORME) {
+                log.info("Ticket {} clôture forcée à NON_CONFORME: {} poste(s) NC",
+                        validation.getTicketCode(), nonConformePostes);
+                finalStatus = TicketStatus.NON_CONFORME;
+            }
+        }
+
+        // Data-quality guard: a line can only be declared CONFORME if at least
+        // one measurement was actually recorded for the ticket. ValidationResult
+        // rows are ticket-scoped (no zone FK), so we check at the ticket level.
+        // NON_CONFORME closures are still allowed without results — a line can
+        // be rejected because no measurements could be taken.
+        if (finalStatus == TicketStatus.CONFORME) {
+            int resultsCount = validationResultRepository.findByValidationId(id).size();
+            if (resultsCount == 0) {
+                throw new ValidationException(
+                        "Impossible de clôturer le ticket " + validation.getTicketCode() +
+                        " en CONFORME sans aucune mesure enregistrée. " +
+                        "Saisissez au moins un résultat de validation avant la clôture.");
+            }
+        }
+
+        TicketStatus previousStatus = validation.getStatus();
         validation.setStatus(finalStatus);
         validation.setEndDate(LocalDateTime.now());
         validation.setReviewComments(dto.getReviewComments());
-        validation = validationRepository.save(validation);
+        validationRepository.save(validation);
 
-        // Recalculate KPIs for the line
+        // Finalize every non-terminal assignment so the "Mes tickets" list
+        // doesn't keep showing the ticket as EN_COURS for TECH_VAL/TECH_PREP
+        // after the chef closes it.
+        finalizeAssignmentsForClosure(id);
+
+        // Re-fetch with associations for KPI calc, notifications and WebSocket
+        // broadcast — assignments must be eagerly loaded so the messaging
+        // service can reach every assigned tech.
+        Validation reloaded = findValidationOrThrow(id);
+
+        // Recalculate KPIs for the line (prefer direct FK, fall back to legacy chain)
         try {
-            Long lineId = validation.getValidationZone().getProductionLine().getId();
-            kpiService.recalculateKPIsForLine(lineId);
+            Long lineId = resolveLineId(reloaded);
+            if (lineId != null) {
+                kpiService.recalculateKPIsForLine(lineId);
+            }
         } catch (Exception e) {
             log.warn("Recalcul KPIs échoué: {}", e.getMessage());
         }
 
-        broadcastTicketUpdate(validation);
+        // Notify assigned techs + creator that the ticket has been closed.
+        try {
+            messagingEventService.onTicketStatusChange(reloaded, previousStatus, null);
+        } catch (Exception e) {
+            log.warn("Notification de clôture échouée: {}", e.getMessage());
+        }
 
-        log.info("Ticket {} → {} (cloturé)", validation.getTicketCode(), finalStatus);
-        return validationMapper.toResponseDTO(findValidationOrThrow(id));
+        broadcastTicketUpdate(reloaded);
+
+        log.info("Ticket {} → {} (cloturé)", reloaded.getTicketCode(), finalStatus);
+        return validationMapper.toResponseDTO(reloaded);
+    }
+
+    /**
+     * Mark a single poste inside a line-ticket as CONFORME or NON_CONFORME.
+     * Used by TECH_VAL (or TECH_PREP for prep-only postes) to close each
+     * poste independently. When the last poste reaches a terminal state the
+     * parent ticket is auto-advanced to {@link TicketStatus#EN_REVUE} so the
+     * CHEF_SECTEUR/EXPERT can close it.
+     */
+    public ValidationResponseDTO markPosteDone(Long validationId,
+                                               Long zoneId,
+                                               String finalStatusRaw,
+                                               String notes,
+                                               Long actingUserId) {
+        Validation validation = findValidationOrThrow(validationId);
+
+        if (validation.getStatus() != TicketStatus.EN_COURS
+                && validation.getStatus() != TicketStatus.EN_REVUE) {
+            throw new ValidationException(
+                    "Impossible de clôturer un poste: le ticket " + validation.getTicketCode() +
+                    " est en statut " + validation.getStatus() +
+                    " (attendu: EN_COURS ou EN_REVUE)");
+        }
+
+        TicketStatus finalStatus;
+        try {
+            finalStatus = TicketStatus.valueOf(finalStatusRaw);
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException("Statut invalide: " + finalStatusRaw);
+        }
+        if (finalStatus != TicketStatus.CONFORME && finalStatus != TicketStatus.NON_CONFORME) {
+            throw new ValidationException(
+                    "Le statut final d'un poste doit être CONFORME ou NON_CONFORME");
+        }
+
+        ValidationPosteStatus row = posteStatusRepository
+                .findByValidationIdAndZoneId(validationId, zoneId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Poste " + zoneId + " non lié au ticket " + validation.getTicketCode()));
+
+        if (row.getStatus() == TicketStatus.CONFORME
+                || row.getStatus() == TicketStatus.NON_CONFORME) {
+            throw new ValidationException(
+                    "Le poste " + (row.getZone() != null ? row.getZone().getName() : zoneId) +
+                    " est déjà clôturé (" + row.getStatus() + ")");
+        }
+
+        User actor = userRepository.findById(actingUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur non trouvé"));
+
+        row.setStatus(finalStatus);
+        row.setValidatedBy(actor);
+        row.setValidatedAt(LocalDateTime.now());
+        if (notes != null && !notes.isBlank()) {
+            row.setNotes(notes);
+        }
+        posteStatusRepository.save(row);
+
+        // Auto-advance the parent ticket to EN_REVUE once every poste is done.
+        long total = posteStatusRepository.countByValidationId(validationId);
+        long done = posteStatusRepository.countByValidationIdAndStatusIn(
+                validationId, List.of(TicketStatus.CONFORME, TicketStatus.NON_CONFORME));
+        if (total > 0 && done == total
+                && validation.getStatus() == TicketStatus.EN_COURS) {
+            validation.setStatus(TicketStatus.EN_REVUE);
+            validationRepository.save(validation);
+            // Re-fetch with LEFT JOIN FETCH so assignments are loaded before
+            // we hand the entity to messagingEventService (which iterates
+            // validation.getAssignments() to notify each assigned tech).
+            Validation reloaded = findValidationOrThrow(validationId);
+            try {
+                messagingEventService.onTicketSubmittedForReview(reloaded, actor);
+                messagingEventService.onTicketStatusChange(reloaded, TicketStatus.EN_COURS, actor);
+            } catch (Exception e) {
+                log.warn("Notification auto EN_REVUE échouée: {}", e.getMessage());
+            }
+            log.info("Ticket {} → EN_REVUE (tous les postes clôturés)",
+                    reloaded.getTicketCode());
+            broadcastTicketUpdate(reloaded);
+        } else {
+            broadcastTicketUpdate(validation);
+        }
+
+        log.info("Ticket {} — poste {} → {} par {}",
+                validation.getTicketCode(), zoneId, finalStatus, actor.getUsername());
+        return validationMapper.toResponseDTO(findValidationOrThrow(validationId));
+    }
+
+    /**
+     * Resolve the owning line id, preferring the new {@code productionLine}
+     * FK and falling back to the legacy {@code validationZone.productionLine}
+     * chain for any row that hasn't been migrated yet.
+     */
+    private Long resolveLineId(Validation validation) {
+        if (validation == null) return null;
+        if (validation.getProductionLine() != null) {
+            return validation.getProductionLine().getId();
+        }
+        if (validation.getValidationZone() != null
+                && validation.getValidationZone().getProductionLine() != null) {
+            return validation.getValidationZone().getProductionLine().getId();
+        }
+        return null;
     }
 
     /**
@@ -383,6 +668,11 @@ public class ValidationService {
                 validation.getComments() + " | Annulé: " + reason : "Annulé: " + reason);
         validation = validationRepository.save(validation);
 
+        // Any open assignments should no longer show as "in progress" — we mark
+        // them TERMINE (the enum has no ANNULE value). Consumers that care
+        // about the distinction can read Validation.status = ANNULE.
+        finalizeAssignmentsForClosure(id);
+
         try {
             messagingEventService.onTicketCancelled(validation, null, reason);
         } catch (Exception e) {
@@ -393,6 +683,33 @@ public class ValidationService {
 
         log.info("Ticket {} → ANNULE: {}", validation.getTicketCode(), reason);
         return validationMapper.toResponseDTO(validation);
+    }
+
+    /**
+     * Mark every non-terminal assignment of the ticket as TERMINE so that
+     * "Mes tickets" / assignment badges stop showing the ticket as active
+     * after the parent ticket reaches a terminal status (CONFORME,
+     * NON_CONFORME, or ANNULE).
+     *
+     * <p>Safe to call multiple times — rows already in TERMINE are skipped.
+     */
+    private void finalizeAssignmentsForClosure(Long validationId) {
+        try {
+            List<ValidationAssignment> all = assignmentRepository.findByValidationId(validationId);
+            LocalDateTime now = LocalDateTime.now();
+            for (ValidationAssignment a : all) {
+                if (a.getStatus() != AssignmentStatus.TERMINE) {
+                    a.setStatus(AssignmentStatus.TERMINE);
+                    if (a.getCompletedAt() == null) {
+                        a.setCompletedAt(now);
+                    }
+                    assignmentRepository.save(a);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Finalisation des affectations échouée pour ticket {}: {}",
+                    validationId, e.getMessage());
+        }
     }
 
     // ========================

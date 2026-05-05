@@ -22,7 +22,17 @@ public interface ValidationResultRepository extends JpaRepository<ValidationResu
     @Query("SELECT vr FROM ValidationResult vr WHERE vr.validation.validationZone.id = :zoneId")
     List<ValidationResult> findByValidationZoneId(@Param("zoneId") Long zoneId);
 
+    /* ===== Per-poste (2026-04 line-ticket model) ===== */
 
+    @Query("SELECT vr FROM ValidationResult vr WHERE vr.validation.id = :validationId AND vr.zone.id = :zoneId")
+    List<ValidationResult> findByValidationIdAndZoneId(@Param("validationId") Long validationId,
+                                                       @Param("zoneId") Long zoneId);
 
+    @Query("SELECT COUNT(vr) FROM ValidationResult vr WHERE vr.validation.id = :validationId AND vr.zone.id = :zoneId")
+    Long countByValidationIdAndZoneId(@Param("validationId") Long validationId,
+                                      @Param("zoneId") Long zoneId);
 
+    @Query("SELECT COUNT(vr) FROM ValidationResult vr WHERE vr.validation.id = :validationId AND vr.zone.id = :zoneId AND vr.conform = false")
+    Long countNonConformByValidationAndZone(@Param("validationId") Long validationId,
+                                            @Param("zoneId") Long zoneId);
 }

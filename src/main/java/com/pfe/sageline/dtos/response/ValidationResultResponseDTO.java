@@ -13,6 +13,8 @@ public class ValidationResultResponseDTO {
 
     private Long id;
     private Long validationId;
+    private Long zoneId;
+    private String zoneName;
     private String parameter;
     private Double measuredValue;
     private Double expectedValue;

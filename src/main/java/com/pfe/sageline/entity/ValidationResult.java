@@ -32,6 +32,15 @@ public class ValidationResult {
     @JoinColumn(name = "validation_id", nullable = false)
     private Validation validation;
 
+    /**
+     * Per-poste link (2026-04 line-ticket model).
+     * A poste = a row in {@code validation_zones} that belongs to this ticket's production line.
+     * Nullable for legacy rows created before per-poste results were introduced.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "zone_id")
+    private ValidationZone zone;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

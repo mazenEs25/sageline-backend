@@ -22,4 +22,11 @@ public class ValidationResultRequestDTO {
     
     @NotNull(message = "Validation ID is required")
     private Long validationId;
+
+    /**
+     * Per-poste link (2026-04 line-ticket model).
+     * Optional: if provided, the result is attached to a specific poste of the line.
+     * The backend validates that this zone belongs to the ticket's production line.
+     */
+    private Long zoneId;
 }

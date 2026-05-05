@@ -137,6 +137,22 @@ public class ValidationController {
         return ResponseEntity.ok(validationService.closeTicket(id, dto));
     }
 
+    /**
+     * Mark a single poste of a line-ticket as CONFORME or NON_CONFORME.
+     * Added 2026-04 with the line-ticket model — lets different techs close
+     * different postes of the same ticket independently.
+     */
+    @PatchMapping("/{id}/postes/{zoneId}/complete")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'TECH_VAL', 'TECH_PREP', 'CHEF_SECTEUR', 'EXPERT')")
+    public ResponseEntity<ValidationResponseDTO> markPosteDone(
+            @PathVariable Long id,
+            @PathVariable Long zoneId,
+            @Valid @RequestBody PosteCompleteRequestDTO dto) {
+        Long actingUserId = securityUtils.getCurrentUserId();
+        return ResponseEntity.ok(validationService.markPosteDone(
+                id, zoneId, dto.getFinalStatus(), dto.getNotes(), actingUserId));
+    }
+
     @PatchMapping("/{id}/cancel")
     @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")
     public ResponseEntity<ValidationResponseDTO> cancelTicket(

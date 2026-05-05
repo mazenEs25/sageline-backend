@@ -48,4 +48,11 @@ public interface ValidationAssignmentRepository extends JpaRepository<Validation
 
     boolean existsByValidationIdAndUserIdAndAssignmentRole(
             Long validationId, Long userId, AssignmentRole role);
+
+    /**
+     * All assignments on a given ticket for a given user — used by
+     * MessagingEventService to dedupe notification + auto-message when the
+     * same tech is assigned to several postes of the same line-ticket.
+     */
+    List<ValidationAssignment> findByValidationIdAndUserId(Long validationId, Long userId);
 }

@@ -4,11 +4,14 @@ import com.pfe.sageline.dtos.request.ValidationResultRequestDTO;
 import com.pfe.sageline.dtos.response.ValidationResultResponseDTO;
 import com.pfe.sageline.entity.Validation;
 import com.pfe.sageline.entity.ValidationResult;
+import com.pfe.sageline.entity.ValidationZone;
 import com.pfe.sageline.enums.TicketStatus;
 import com.pfe.sageline.exception.ResourceNotFoundException;
+import com.pfe.sageline.exception.ValidationException;
 import com.pfe.sageline.mappers.ValidationResultMapper;
 import com.pfe.sageline.repository.ValidationRepository;
 import com.pfe.sageline.repository.ValidationResultRepository;
+import com.pfe.sageline.repository.ValidationZoneRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,8 +27,41 @@ public class ValidationResultService {
 
     private final ValidationResultRepository validationResultRepository;
     private final ValidationRepository validationRepository;
+    private final ValidationZoneRepository validationZoneRepository;
     private final ValidationResultMapper validationResultMapper;
     private final AIPredictionService aiPredictionService;
+
+    /**
+     * Resolve the zoneId carried by a result request and confirm it belongs to
+     * the ticket's production line. Returns null when no zoneId is supplied
+     * (legacy / unscoped result).
+     *
+     * Throws {@link ValidationException} if the zone does not exist or does
+     * not belong to the ticket's line — this prevents the UI from accidentally
+     * attaching a poste from another line to the result.
+     */
+    private ValidationZone resolveAndCheckZone(Validation ticket, Long zoneId) {
+        if (zoneId == null) return null;
+
+        ValidationZone zone = validationZoneRepository.findById(zoneId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Poste (zone) not found with id: " + zoneId));
+
+        Long ticketLineId = ticket.getProductionLine() != null
+                ? ticket.getProductionLine().getId()
+                : null;
+        Long zoneLineId = zone.getProductionLine() != null
+                ? zone.getProductionLine().getId()
+                : null;
+
+        // Line-ticket model: the poste must belong to the ticket's line.
+        if (ticketLineId != null && zoneLineId != null && !ticketLineId.equals(zoneLineId)) {
+            throw new ValidationException(
+                    "Le poste " + zone.getName() + " n'appartient pas à la ligne du ticket "
+                            + ticket.getTicketCode());
+        }
+        return zone;
+    }
 
     /**
      * Ajouter un résultat à une validation
@@ -46,6 +82,8 @@ public class ValidationResultService {
 
         ValidationResult result = validationResultMapper.toEntity(requestDTO);
         result.setValidation(validation);
+        // Per-poste link (2026-04 line-ticket model) — optional
+        result.setZone(resolveAndCheckZone(validation, requestDTO.getZoneId()));
 
         ValidationResult savedResult = validationResultRepository.save(result);
 
@@ -83,6 +121,8 @@ public class ValidationResultService {
 
                     ValidationResult result = validationResultMapper.toEntity(dto);
                     result.setValidation(validation);
+                    // Per-poste link (2026-04 line-ticket model) — optional
+                    result.setZone(resolveAndCheckZone(validation, dto.getZoneId()));
 
                     ValidationResult savedResult = validationResultRepository.save(result);
                     return validationResultMapper.toResponseDTO(savedResult);
@@ -195,6 +235,10 @@ public class ValidationResultService {
         }
 
         validationResultMapper.updateEntityFromDTO(requestDTO, result);
+        // Allow re-attaching the result to a different poste of the same line
+        if (requestDTO.getZoneId() != null) {
+            result.setZone(resolveAndCheckZone(result.getValidation(), requestDTO.getZoneId()));
+        }
         ValidationResult updatedResult = validationResultRepository.save(result);
         return validationResultMapper.toResponseDTO(updatedResult);
     }

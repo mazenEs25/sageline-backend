@@ -25,11 +25,33 @@ public interface ValidationRepository extends JpaRepository<Validation,Long> {
     @Query("SELECT v FROM Validation v LEFT JOIN FETCH v.validationResults WHERE v.id = :id")
     Optional<Validation> findByIdWithResults(@Param("id") Long id);
 
-    @Query("SELECT v FROM Validation v WHERE v.validationZone.productionLine.id = :lineId")
+    // Prefer the new direct FK (productionLine on Validation). Falls back to the
+    // legacy chain (validationZone -> productionLine) for any unmigrated rows.
+    @Query("SELECT v FROM Validation v " +
+            "WHERE v.productionLine.id = :lineId " +
+            "   OR (v.productionLine IS NULL AND v.validationZone.productionLine.id = :lineId)")
     List<Validation> findByProductionLineId(@Param("lineId") Long lineId);
 
-    @Query("SELECT v FROM Validation v WHERE v.validationZone.productionLine.id = :lineId AND v.status = :status")
-    List<Validation> findByProductionLineIdAndStatus(@Param("lineId") Long lineId, @Param("status") TicketStatus status);
+    @Query("SELECT v FROM Validation v " +
+            "WHERE (v.productionLine.id = :lineId " +
+            "        OR (v.productionLine IS NULL AND v.validationZone.productionLine.id = :lineId)) " +
+            "  AND v.status = :status")
+    List<Validation> findByProductionLineIdAndStatus(@Param("lineId") Long lineId,
+                                                     @Param("status") TicketStatus status);
+
+    /**
+     * Active (non-terminal) tickets for a given line on a given planned week.
+     * Used to prevent creating duplicate line-level tickets for the same week.
+     */
+    @Query("SELECT v FROM Validation v " +
+            "WHERE (v.productionLine.id = :lineId " +
+            "        OR (v.productionLine IS NULL AND v.validationZone.productionLine.id = :lineId)) " +
+            "  AND v.status NOT IN ('CONFORME', 'NON_CONFORME', 'ANNULE') " +
+            "  AND ( (v.plannedWeekStart IS NOT NULL AND v.plannedWeekStart = :weekStart) " +
+            "     OR (v.plannedWeekStart IS NULL AND v.plannedDate BETWEEN :weekStart AND :weekEnd) )")
+    List<Validation> findActiveByLineAndWeek(@Param("lineId") Long lineId,
+                                             @Param("weekStart") LocalDate weekStart,
+                                             @Param("weekEnd") LocalDate weekEnd);
 
     @Query("SELECT COUNT(v) FROM Validation v WHERE v.status = :status AND v.startDate >= :date")
     Long countByStatusSinceDate(@Param("status") TicketStatus status, @Param("date") LocalDateTime date);
@@ -78,10 +100,16 @@ public interface ValidationRepository extends JpaRepository<Validation,Long> {
             "WHERE v.ticketCode LIKE :prefix")
     int findMaxTicketNumber(@Param("prefix") String prefix);
     // Pour les KPIs
-    @Query("SELECT COUNT(v) FROM Validation v WHERE v.validationZone.productionLine.id = :lineId AND v.status = 'CONFORME' AND v.endDate >= :startDate")
+    @Query("SELECT COUNT(v) FROM Validation v " +
+            "WHERE (v.productionLine.id = :lineId " +
+            "        OR (v.productionLine IS NULL AND v.validationZone.productionLine.id = :lineId)) " +
+            "  AND v.status = 'CONFORME' AND v.endDate >= :startDate")
     Long countConformeByLineAndDateRange(@Param("lineId") Long lineId, @Param("startDate") LocalDateTime startDate);
 
-    @Query("SELECT COUNT(v) FROM Validation v WHERE v.validationZone.productionLine.id = :lineId AND v.status = 'NON_CONFORME' AND v.endDate >= :startDate")
+    @Query("SELECT COUNT(v) FROM Validation v " +
+            "WHERE (v.productionLine.id = :lineId " +
+            "        OR (v.productionLine IS NULL AND v.validationZone.productionLine.id = :lineId)) " +
+            "  AND v.status = 'NON_CONFORME' AND v.endDate >= :startDate")
     Long countNonConformeByLineAndDateRange(@Param("lineId") Long lineId, @Param("startDate") LocalDateTime startDate);
 }
 

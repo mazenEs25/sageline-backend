@@ -128,8 +128,15 @@ public class MessagingEventService {
      * Appelé quand l'IA détecte un risque élevé.
      */
     public void onAIAlert(Validation validation, String riskLevel, double riskScore) {
-        // Notifier le chef de secteur de la ligne
-        ProductionLine line = validation.getValidationZone().getProductionLine();
+        // Resolve the line via the new FK first, fall back to the legacy
+        // zone→line chain for tickets that haven't been migrated yet.
+        ProductionLine line = validation.getProductionLine();
+        if (line == null && validation.getValidationZone() != null) {
+            line = validation.getValidationZone().getProductionLine();
+        }
+        String lineName = line != null ? line.getName() : "?";
+        String zoneName = validation.getValidationZone() != null
+                ? validation.getValidationZone().getName() : "?";
 
         String content = String.format(
                 "⚠️ Alerte IA — Validation #%d\n" +
@@ -138,8 +145,8 @@ public class MessagingEventService {
                 validation.getId(),
                 riskLevel,
                 riskScore * 100,
-                validation.getValidationZone().getName(),
-                line.getName()
+                zoneName,
+                lineName
         );
 
         // On pourrait chercher le chef de secteur de la ligne ici
@@ -162,6 +169,17 @@ public class MessagingEventService {
     // TICKET WORKFLOW EVENTS
     // =====================================================
 
+    /**
+     * Emit notification + VALIDATION_ASSIGNMENT auto-message for a freshly
+     * persisted {@link ValidationAssignment}.
+     *
+     * <p><b>2026-04 line-ticket dedupe (M2 semantics):</b> a single line-ticket
+     * can have several assignments for the same user (one per poste). We send
+     * the detailed affectation message exactly once per (user, ticket) — on the
+     * assignment whose id is the lowest. Subsequent calls still create the
+     * tech's notification (so they see each new poste) but skip the auto-message
+     * to keep the conversation panel clean.
+     */
     public void onTicketAssignment(ValidationAssignment assignment) {
         Validation validation = assignment.getValidation();
         User user = assignment.getUser();
@@ -172,22 +190,46 @@ public class MessagingEventService {
         String roleName = assignment.getAssignmentRole() == AssignmentRole.TECH_PREPARATION
                 ? "Technicien Préparation" : "Technicien Validation";
 
-        // Zone, ligne, secteur info
-        String zoneName = assignment.getZone() != null ? assignment.getZone().getName() : "?";
+        // Gather this user's assignments on this ticket so we can (a) detect
+        // duplicates and (b) list every poste they're responsible for in the
+        // auto-message.
+        java.util.List<ValidationAssignment> sameTicketForUser =
+                assignmentRepository.findByValidationIdAndUserId(
+                        validation.getId(), user.getId());
+
+        boolean isFirstAssignmentForUser = sameTicketForUser.isEmpty()
+                || sameTicketForUser.stream()
+                        .allMatch(a -> a.getId() == null
+                                || assignment.getId() == null
+                                || a.getId() >= assignment.getId());
+
+        // Poste list attached to this user on this ticket
+        String postesLabel = sameTicketForUser.isEmpty()
+                ? (assignment.getZone() != null ? assignment.getZone().getName() : "?")
+                : sameTicketForUser.stream()
+                        .map(a -> a.getZone() != null ? a.getZone().getName() : "?")
+                        .distinct()
+                        .reduce((a, b) -> a + ", " + b)
+                        .orElse("?");
+
+        // Line + sector info (prefer the new direct FK, fall back to the legacy chain)
         String lineName = "?";
+        String lineCode = "?";
         String secteurName = "?";
         try {
-            if (validation.getValidationZone() != null) {
-                if (validation.getValidationZone().getProductionLine() != null) {
-                    ProductionLine line = validation.getValidationZone().getProductionLine();
-                    lineName = line.getName();
-                    if (line.getPhase() != null && line.getPhase().getSecteur() != null) {
-                        secteurName = line.getPhase().getSecteur().getName();
-                    }
+            ProductionLine line = validation.getProductionLine();
+            if (line == null && validation.getValidationZone() != null) {
+                line = validation.getValidationZone().getProductionLine();
+            }
+            if (line != null) {
+                lineName = line.getName();
+                lineCode = line.getCode();
+                if (line.getPhase() != null && line.getPhase().getSecteur() != null) {
+                    secteurName = line.getPhase().getSecteur().getName();
                 }
             }
         } catch (Exception e) {
-            log.warn("Impossible de charger les détails zone/ligne/secteur: {}", e.getMessage());
+            log.warn("Impossible de charger les détails ligne/secteur: {}", e.getMessage());
         }
 
         String priority = validation.getPriority() != null ? validation.getPriority().name() : "NORMALE";
@@ -200,12 +242,20 @@ public class MessagingEventService {
         String assignerRole = validation.getCreatedBy() != null
                 ? formatRole(validation.getCreatedBy().getRole()) : "";
 
-        // 1. Notification push
-        String title = "Nouvelle affectation — Ticket " + validation.getTicketCode();
-        String notifContent = String.format(
-                "Vous avez été affecté(e) au ticket %s en tant que %s sur la zone %s. Priorité: %s",
-                validation.getTicketCode(), roleName, zoneName, priority
-        );
+        // 1. Notification push — always fired so the tech sees every poste they
+        //    get attached to, even if the conversation is already open.
+        String title = isFirstAssignmentForUser
+                ? "Nouvelle affectation — Ticket " + validation.getTicketCode()
+                : "Poste ajouté — Ticket " + validation.getTicketCode();
+        String notifContent = isFirstAssignmentForUser
+                ? String.format(
+                        "Vous avez été affecté(e) au ticket %s (ligne %s) en tant que %s sur le(s) poste(s) : %s. Priorité: %s",
+                        validation.getTicketCode(), lineCode, roleName, postesLabel, priority)
+                : String.format(
+                        "Nouveau poste ajouté sur le ticket %s : %s (%s).",
+                        validation.getTicketCode(),
+                        assignment.getZone() != null ? assignment.getZone().getName() : "?",
+                        roleName);
 
         notificationService.createAndSend(
                 user.getId(),
@@ -216,15 +266,19 @@ public class MessagingEventService {
                 "VALIDATION"
         );
 
-        // 2. Auto-create VALIDATION_ASSIGNMENT conversation with detailed message
-        if (validation.getCreatedBy() != null && !validation.getCreatedBy().getId().equals(user.getId())) {
+        // 2. Auto-message — only on the FIRST assignment for this user on this
+        //    ticket. For additional postes the existing conversation is reused
+        //    silently (the tech will see the new poste in the ticket detail).
+        if (isFirstAssignmentForUser
+                && validation.getCreatedBy() != null
+                && !validation.getCreatedBy().getId().equals(user.getId())) {
             try {
                 String autoMsg = String.format(
                         "📋 Nouvelle affectation — Ticket %s\n\n" +
                         "👤 Rôle : %s\n" +
-                        "📍 Zone : %s\n" +
-                        "🏭 Ligne : %s\n" +
+                        "🏭 Ligne : %s (%s)\n" +
                         "🔧 Secteur : %s\n" +
+                        "📍 Poste(s) : %s\n" +
                         "⚡ Priorité : %s\n" +
                         "📅 Date planifiée : %s\n" +
                         "💬 Commentaires : %s\n\n" +
@@ -232,9 +286,9 @@ public class MessagingEventService {
                         "N'hésitez pas à poser vos questions ici.",
                         validation.getTicketCode(),
                         roleName,
-                        zoneName,
-                        lineName,
+                        lineName, lineCode,
                         secteurName,
+                        postesLabel,
                         priority,
                         plannedDate,
                         comments,
@@ -262,6 +316,11 @@ public class MessagingEventService {
             } catch (Exception e) {
                 log.warn("Auto-message échoué pour user {}: {}", user.getId(), e.getMessage(), e);
             }
+        } else if (!isFirstAssignmentForUser) {
+            log.info("Ticket {} — affectation supplémentaire pour {} (poste {}), pas de nouveau message (M2 dedupe)",
+                    validation.getTicketCode(),
+                    user.getUsername(),
+                    assignment.getZone() != null ? assignment.getZone().getName() : "?");
         }
 
         log.info("Ticket {} affecté à {} ({})",
