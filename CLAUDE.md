@@ -73,22 +73,42 @@ Conversation → Message
 ### Ticket Workflow (`TicketStatus` enum)
 
 ```
-PLANIFIE → EN_PREP → PRET → EN_COURS → EN_REVUE → CONFORME | NON_CONFORME | ANNULE
+PLANIFIE → EN_ATTENTE_PREP → PREP_VALIDEE → EN_COURS → EN_ATTENTE_HANDOVER ↔ EN_COURS
+                                                      ↓
+                                                   EN_REVUE → CONFORME | NON_CONFORME | ANNULE
 ```
 
 Workflow transitions (controller endpoints, role-gated):
 - `PATCH /api/validations/{id}/start-prep` — TECH_PREP or ADMIN_IT
 - `PATCH /api/validations/{id}/validate-prep` — TECH_PREP or ADMIN_IT
 - `PATCH /api/validations/{id}/start` — TECH_VAL or ADMIN_IT
-- `PATCH /api/validations/{id}/submit-review` — TECH_VAL or ADMIN_IT
+- `PATCH /api/validations/{id}/submit-review` — TECH_VAL or ADMIN_IT (FR-006a: original tech can submit even from EN_ATTENTE_HANDOVER, which auto-cancels the handover)
 - `PATCH /api/validations/{id}/close` — CHEF_SECTEUR, EXPERT, or ADMIN_IT
 - `PATCH /api/validations/{id}/cancel` — CHEF_SECTEUR or ADMIN_IT
+
+### Handover Workflow (`TicketHandover` + `HandoverStatus`)
+
+`EN_COURS → EN_ATTENTE_HANDOVER` when a handover is initiated (manual, auto, force). `EN_ATTENTE_HANDOVER → EN_COURS` when accepted or cancelled.
+
+Handover endpoints (`/api/handovers`):
+- `POST /api/handovers/initiate/{validationId}` — TECH_VAL (manual) or CHEF_SECTEUR/ADMIN_IT (force)
+- `POST /api/handovers/{handoverId}/accept` — TECH_VAL (same production-line only — service guard)
+- `PATCH /api/handovers/{handoverId}/assign` — CHEF_SECTEUR, ADMIN_IT
+- `PATCH /api/handovers/{handoverId}/cancel` — CHEF_SECTEUR, ADMIN_IT
+- `GET /api/handovers/pending` — CHEF_SECTEUR, ADMIN_IT
+- `GET /api/handovers/validation/{validationId}` — any authenticated
+- `GET /api/handovers/kpis?from=&to=` — CHEF_SECTEUR, EXPERT, ADMIN_IT
+
+**Cron job**: `ShiftEndHandoverJob` fires every weekday at 16:45 (`0 45 16 * * MON-FRI`), sweeps all `EN_COURS` tickets, and initiates `SHIFT_END_AUTO` handovers idempotently. Requires `@EnableScheduling` (on `SagelineApplication`).
+
+**STOMP events**: `HANDOVER_TRIGGERED`, `HANDOVER_ASSIGNED`, `HANDOVER_ACCEPTED`, `HANDOVER_CANCELLED` — personal queue `/user/{userId}/queue/handover` + zone broadcast `/topic/handover.zone.{lineId}`.
 
 ## Key Services
 
 - `AIPredictionService` — calls Python ML service at `/predict`, calculates deviations, falls back to defaults if unavailable
 - `KPIService` — conformity rate calculations, dashboard generation, auto-recalculates on validation closure
 - `ValidationService` — orchestrates the full ticket lifecycle, triggers AI predictions and KPI updates
+- `HandoverService` / `HandoverServiceImpl` — full shift-end handover protocol (US1–US7)
 - `AnomalyDetectionService` / `ToolRecommendationService` — AI-output management
 - `NotificationService` — creates and pushes notifications over WebSocket
 

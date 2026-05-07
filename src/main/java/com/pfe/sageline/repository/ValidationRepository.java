@@ -11,6 +11,22 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ValidationRepository extends JpaRepository<Validation,Long> {
+
+    @Query("""
+        SELECT v FROM Validation v
+        WHERE  v.status = :status
+        AND EXISTS (
+            SELECT 1 FROM ValidationAssignment a
+            WHERE  a.validation = v
+            AND    a.status = 'EN_COURS'
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM TicketHandover h
+            WHERE  h.validation = v
+            AND    h.status IN ('PENDING','ACCEPTED')
+        )
+    """)
+    List<Validation> findEligibleForShiftEndHandover(@Param("status") TicketStatus status);
     List<Validation> findByValidationZoneId(Long validationZoneId);
     List<Validation> findByValidationZoneIdAndStartDateAfter(Long zoneId, LocalDateTime after);
     List<Validation> findByStatus(TicketStatus status);

@@ -114,6 +114,15 @@ public class SecurityConfig {
 
 
 
+                        // Handover endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/handovers/initiate/**").hasAnyRole("TECH_VAL","CHEF_SECTEUR","ADMIN_IT")
+                        .requestMatchers(HttpMethod.POST, "/api/handovers/*/accept").hasRole("TECH_VAL")
+                        .requestMatchers(HttpMethod.PATCH, "/api/handovers/*/assign").hasAnyRole("CHEF_SECTEUR","ADMIN_IT")
+                        .requestMatchers(HttpMethod.PATCH, "/api/handovers/*/cancel").hasAnyRole("CHEF_SECTEUR","ADMIN_IT")
+                        .requestMatchers(HttpMethod.GET, "/api/handovers/pending").hasAnyRole("CHEF_SECTEUR","ADMIN_IT")
+                        .requestMatchers(HttpMethod.GET, "/api/handovers/kpis").hasAnyRole("CHEF_SECTEUR","EXPERT","ADMIN_IT")
+                        .requestMatchers(HttpMethod.GET, "/api/handovers/validation/**").authenticated()
+
                         // KPIs: recalculate is admin-only
                         .requestMatchers(HttpMethod.POST, "/api/kpis/**").hasRole("ADMIN_IT")
                         .requestMatchers(HttpMethod.DELETE, "/api/kpis/**").hasRole("ADMIN_IT")

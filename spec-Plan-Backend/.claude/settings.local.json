@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash .specify/extensions/git/scripts/bash/initialize-repo.sh)",
+      "Bash(bash *)",
+      "PowerShell(.\\\\.specify\\\\scripts\\\\powershell\\\\setup-plan.ps1 -Json)",
+      "Read(//c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/**)",
+      "PowerShell(.\\\\.specify\\\\scripts\\\\powershell\\\\setup-tasks.ps1 -Json)",
+      "Bash(powershell -File \".specify/scripts/powershell/check-prerequisites.ps1\" -Json -RequireTasks -IncludeTasks)",
+      "Bash(./mvnw compile *)",
+      "PowerShell(cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; $env:JAVA_HOME = \"C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-17.0.15.6-hotspot\"; .\\\\mvnw compile 2>&1 | Select-Object -Last 60)",
+      "PowerShell(cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; $env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; .\\\\mvnw compile 2>&1 | Select-Object -Last 80)",
+      "PowerShell(cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; $env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; .\\\\mvnw compile 2>&1 | Select-Object -Last 20)",
+      "PowerShell(cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; $env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; .\\\\mvnw test-compile 2>&1 | Select-Object -Last 20)",
+      "PowerShell(cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; $env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; .\\\\mvnw test -DskipTests=false -pl . \"-Dtest=HandoverServiceImplAutoTriggerTest,HandoverServiceImplAcceptTest\" 2>&1 | Select-Object -Last 40)",
+      "Bash(.\\\\mvnw test *)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; $env:MAVEN_OPTS=\"-Xmx512m\"; .\\\\mvnw.cmd test \"-Dtest=HandoverServiceImplAutoTriggerTest,HandoverServiceImplAcceptTest\" | Select-Object -Last 70)"
+    ]
+  }
+}

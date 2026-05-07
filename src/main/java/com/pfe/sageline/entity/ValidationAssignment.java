@@ -54,6 +54,9 @@ public class ValidationAssignment {
     @Column(length = 500)
     private String notes;
 
+    @Column(name = "handover_note", columnDefinition = "TEXT")
+    private String handoverNote;
+
     @PrePersist
     protected void onCreate() {
         this.assignedAt = LocalDateTime.now();

@@ -3,5 +3,6 @@ package com.pfe.sageline.enums;
 public enum AssignmentStatus {
     ASSIGNE,    // Affecté mais pas encore démarré
     EN_COURS,   // En cours de travail
+    PAUSED,     // Gelé pendant une passation de poste
     TERMINE     // Travail terminé
 }

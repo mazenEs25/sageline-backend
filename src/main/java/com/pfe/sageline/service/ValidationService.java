@@ -41,6 +41,8 @@ public class ValidationService {
     private final KPIService kpiService;
     private final MessagingEventService messagingEventService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final HandoverService handoverService;
+    private final com.pfe.sageline.Config.SecurityUtils securityUtils;
 
     // ========================
     // CRUD
@@ -413,10 +415,28 @@ public class ValidationService {
     }
 
     /**
-     * TECH_VAL submits for review → EN_REVUE
+     * TECH_VAL submits for review → EN_REVUE.
+     * FR-006a: if the ticket is EN_ATTENTE_HANDOVER, the original assignee may
+     * still submit for review, which auto-cancels the pending handover first.
      */
     public ValidationResponseDTO submitForReview(Long id) {
         Validation validation = findValidationOrThrow(id);
+
+        if (validation.getStatus() == TicketStatus.EN_ATTENTE_HANDOVER) {
+            Long currentUserId = securityUtils.getCurrentUserId();
+            boolean isOriginalTech = assignmentRepository.findByValidationId(id).stream()
+                    .anyMatch(a -> a.getUser().getId().equals(currentUserId)
+                            && a.getStatus() == AssignmentStatus.PAUSED);
+            if (!isOriginalTech) {
+                throw new ValidationException(
+                        "Le ticket " + validation.getTicketCode() +
+                        " est en attente de passation — seul le technicien d'origine peut le soumettre en revue (FR-006)");
+            }
+            handoverService.autoCancelIfPending(validation);
+            // Reload after auto-cancel changed the status back to EN_COURS
+            validation = findValidationOrThrow(id);
+        }
+
         assertStatus(validation, TicketStatus.EN_COURS, "soumettre pour revue");
 
         validation.setStatus(TicketStatus.EN_REVUE);
@@ -661,6 +681,13 @@ public class ValidationService {
             throw new ValidationException("Impossible d'annuler un ticket déjà clôturé");
         }
 
+        // FR-006a: auto-cancel any pending handover before cancelling the ticket;
+        // if this throws, the whole transaction rolls back (intentional).
+        if (validation.getStatus() == TicketStatus.EN_ATTENTE_HANDOVER) {
+            handoverService.autoCancelIfPending(validation);
+            validation = findValidationOrThrow(id);
+        }
+
         TicketStatus oldStatus = validation.getStatus();
         validation.setStatus(TicketStatus.ANNULE);
         validation.setEndDate(LocalDateTime.now());
@@ -694,21 +721,16 @@ public class ValidationService {
      * <p>Safe to call multiple times — rows already in TERMINE are skipped.
      */
     private void finalizeAssignmentsForClosure(Long validationId) {
-        try {
-            List<ValidationAssignment> all = assignmentRepository.findByValidationId(validationId);
-            LocalDateTime now = LocalDateTime.now();
-            for (ValidationAssignment a : all) {
-                if (a.getStatus() != AssignmentStatus.TERMINE) {
-                    a.setStatus(AssignmentStatus.TERMINE);
-                    if (a.getCompletedAt() == null) {
-                        a.setCompletedAt(now);
-                    }
-                    assignmentRepository.save(a);
+        List<ValidationAssignment> all = assignmentRepository.findByValidationId(validationId);
+        LocalDateTime now = LocalDateTime.now();
+        for (ValidationAssignment a : all) {
+            if (a.getStatus() != AssignmentStatus.TERMINE) {
+                a.setStatus(AssignmentStatus.TERMINE);
+                if (a.getCompletedAt() == null) {
+                    a.setCompletedAt(now);
                 }
+                assignmentRepository.save(a);
             }
-        } catch (Exception e) {
-            log.warn("Finalisation des affectations échouée pour ticket {}: {}",
-                    validationId, e.getMessage());
         }
     }
 

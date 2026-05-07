@@ -68,6 +68,23 @@ public class UserController {
         return ResponseEntity.ok(users);
     }
 
+    @GetMapping("/role/{role}")
+    @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR', 'EXPERT', 'TECH_VAL', 'TECH_PREP', 'RESPONSABLE')")
+    @Operation(summary = "Récupérer les utilisateurs par rôle")
+    public ResponseEntity<List<UserResponseDTO>> getUsersByRole(@PathVariable String role) {
+        com.pfe.sageline.enums.Role parsedRole;
+        try {
+            parsedRole = com.pfe.sageline.enums.Role.valueOf(role);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<UserResponseDTO> users = userRepository.findByRole(parsedRole)
+                .stream()
+                .map(userMapper::toResponseDTO)
+                .toList();
+        return ResponseEntity.ok(users);
+    }
+
     @PostMapping
     @PreAuthorize("hasRole('ADMIN_IT')")
     @Operation(summary = "Créer un nouvel utilisateur")
