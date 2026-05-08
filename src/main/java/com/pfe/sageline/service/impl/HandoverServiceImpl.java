@@ -67,9 +67,21 @@ public class HandoverServiceImpl implements HandoverService {
     // ─── US1: Automated handover (SHIFT_END_AUTO) ───────────────────────────
 
     @Override
-    public void triggerAutoHandover(Validation ticket) {
+    public void triggerAutoHandover(Validation detached) {
+        // The caller (ShiftEndHandoverJob) loads tickets in its own non-transactional
+        // context, so the parameter is detached. Re-attach by ID so lazy associations
+        // (productionLine -> phase -> secteur) can resolve inside this @Transactional
+        // method, otherwise resolveSecteurId() throws LazyInitializationException.
+        Validation ticket = validationRepository.findById(detached.getId())
+                .orElse(null);
+        if (ticket == null) {
+            log.warn("[Auto-handover] Ticket {} introuvable au moment du sweep — skipping",
+                    detached.getId());
+            return;
+        }
+
         if (handoverRepository.findActiveByValidation(ticket.getId()).isPresent()) {
-            log.debug("Ticket {} already has an active handover — skipping", ticket.getTicketCode());
+            log.info("[Auto-handover] Ticket {} already has an active handover — skipping", ticket.getTicketCode());
             return;
         }
 
@@ -111,7 +123,7 @@ public class HandoverServiceImpl implements HandoverService {
                     "Passation de poste",
                     String.format(MSG_TRIGGERED_AUTO, ticketCode),
                     NotificationType.HANDOVER_TRIGGERED,
-                    handoverId, "HANDOVER");
+                    validationId, "VALIDATION");
 
             sendPersonalEvent(fromTechId, new HandoverNotificationDto(
                     "HANDOVER_TRIGGERED", handoverId, validationId, ticketCode,
@@ -201,7 +213,7 @@ public class HandoverServiceImpl implements HandoverService {
 
             notificationService.createAndSend(
                     fromTechId, "Passation de poste", personalMsg,
-                    NotificationType.HANDOVER_TRIGGERED, handoverId, "HANDOVER");
+                    NotificationType.HANDOVER_TRIGGERED, validationId, "VALIDATION");
 
             sendPersonalEvent(fromTechId, new HandoverNotificationDto(
                     "HANDOVER_TRIGGERED", handoverId, validationId, ticketCode,
@@ -233,34 +245,8 @@ public class HandoverServiceImpl implements HandoverService {
         User currentUser = userRepository.findById(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Utilisateur courant introuvable"));
 
-        // Zone-locality check (FR-019a): user must have at least one assignment on the
-        // same production line as the ticket. Resolved via direct FK first, then the
-        // legacy validationZone chain. If neither is set we cannot enforce the guard
-        // and throw to be safe.
-        Long lineId;
-        if (validation.getProductionLine() != null) {
-            lineId = validation.getProductionLine().getId();
-        } else if (validation.getValidationZone() != null
-                && validation.getValidationZone().getProductionLine() != null) {
-            lineId = validation.getValidationZone().getProductionLine().getId();
-        } else {
-            throw new ValidationException("cross-zone self-accept not allowed");
-        }
-        boolean inZone = assignmentRepository.findByUserId(currentUserId).stream()
-                .anyMatch(a -> a.getZone() != null
-                        && a.getZone().getProductionLine() != null
-                        && a.getZone().getProductionLine().getId().equals(lineId));
-        if (!inZone) {
-            throw new ValidationException("cross-zone self-accept not allowed");
-        }
-
-        // Guard: no other ACTIVE assignment on this ticket
-        boolean alreadyActive = assignmentRepository.findByValidationId(validationId).stream()
-                .anyMatch(a -> a.getStatus() == AssignmentStatus.EN_COURS);
-        if (alreadyActive) {
-            throw new ValidationException("Le ticket possède déjà un technicien actif");
-        }
-
+        // 1. Status / targeting checks come first so we can decide whether the
+        //    line-locality guard applies (it doesn't for an explicitly assigned tech).
         HandoverStatus expected = handover.getStatus();
         if (expected != HandoverStatus.PENDING && expected != HandoverStatus.ACCEPTED) {
             throw new ValidationException("La passation ne peut plus être acceptée (statut: " + expected + ")");
@@ -268,6 +254,41 @@ public class HandoverServiceImpl implements HandoverService {
         if (expected == HandoverStatus.ACCEPTED
                 && (handover.getToTech() == null || !handover.getToTech().getId().equals(currentUserId))) {
             throw new ValidationException("Cette passation est déjà assignée à un autre technicien");
+        }
+
+        // 2. Line-locality guard (FR-019a): only applies on open self-accept (PENDING).
+        //    When the handover was explicitly ACCEPTED-to a specific tech by a
+        //    supervisor, that targeting is the authorization — skip the guard so a
+        //    cross-line assignment can resume the ticket.
+        boolean isAssignedToTech = expected == HandoverStatus.ACCEPTED
+                && handover.getToTech() != null
+                && handover.getToTech().getId().equals(currentUserId);
+        if (!isAssignedToTech) {
+            Long lineId;
+            if (validation.getProductionLine() != null) {
+                lineId = validation.getProductionLine().getId();
+            } else if (validation.getValidationZone() != null
+                    && validation.getValidationZone().getProductionLine() != null) {
+                lineId = validation.getValidationZone().getProductionLine().getId();
+            } else {
+                throw new ValidationException("Ligne de production introuvable pour ce ticket");
+            }
+            boolean inZone = assignmentRepository.findByUserId(currentUserId).stream()
+                    .anyMatch(a -> a.getZone() != null
+                            && a.getZone().getProductionLine() != null
+                            && a.getZone().getProductionLine().getId().equals(lineId));
+            if (!inZone) {
+                throw new ValidationException(
+                    "Vous n'êtes pas affecté à cette ligne de production. " +
+                    "Demandez à un superviseur de vous assigner explicitement la passation.");
+            }
+        }
+
+        // 3. Concurrency guard: no other ACTIVE assignment on this ticket.
+        boolean alreadyActive = assignmentRepository.findByValidationId(validationId).stream()
+                .anyMatch(a -> a.getStatus() == AssignmentStatus.EN_COURS);
+        if (alreadyActive) {
+            throw new ValidationException("Le ticket possède déjà un technicien actif");
         }
 
         int updated = handoverRepository.compareAndSetStatus(
@@ -356,7 +377,7 @@ public class HandoverServiceImpl implements HandoverService {
             notificationService.createAndSend(
                     techId, "Passation assignée",
                     String.format(MSG_ASSIGNED_PERSONAL, ticketCode),
-                    NotificationType.HANDOVER_ASSIGNED, handoverId, "HANDOVER");
+                    NotificationType.HANDOVER_ASSIGNED, validationId, "VALIDATION");
 
             sendPersonalEvent(techId, new HandoverNotificationDto(
                     "HANDOVER_ASSIGNED", handoverId, validationId, ticketCode,
@@ -427,7 +448,7 @@ public class HandoverServiceImpl implements HandoverService {
             notificationService.createAndSend(
                     originalTechId, "Passation annulée",
                     String.format(MSG_CANCELLED_PERSONAL, ticketCode),
-                    NotificationType.HANDOVER_CANCELLED, handoverId, "HANDOVER");
+                    NotificationType.HANDOVER_CANCELLED, validationId, "VALIDATION");
 
             sendPersonalEvent(originalTechId, new HandoverNotificationDto(
                     "HANDOVER_CANCELLED", handoverId, validationId, ticketCode,

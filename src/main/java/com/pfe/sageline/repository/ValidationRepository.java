@@ -100,10 +100,22 @@ public interface ValidationRepository extends JpaRepository<Validation,Long> {
             "WHERE p.secteur.id = :secteurId")
     List<Validation> findBySecteurId(@Param("secteurId") Long secteurId);
 
-    @Query("SELECT v FROM Validation v " +
-            "JOIN v.assignments a " +
-            "WHERE a.user.id = :userId " +
-            "AND v.status NOT IN ('CONFORME', 'NON_CONFORME', 'ANNULE')")
+    /**
+     * Active tickets the user has a stake in:
+     *  - they hold a ValidationAssignment (any status), OR
+     *  - they have been designated as the incoming tech on a PENDING / ACCEPTED
+     *    TicketHandover (no assignment row exists yet — created at acceptance).
+     * The OR on handovers is what surfaces a freshly-assigned passation in the
+     * incoming tech's "Mes Affectations" list before they click Accept.
+     */
+    @Query("SELECT DISTINCT v FROM Validation v " +
+            "LEFT JOIN v.assignments a " +
+            "WHERE v.status NOT IN ('CONFORME', 'NON_CONFORME', 'ANNULE') " +
+            "AND ( a.user.id = :userId " +
+            "      OR EXISTS ( SELECT 1 FROM TicketHandover h " +
+            "                  WHERE h.validation = v " +
+            "                    AND h.toTech.id = :userId " +
+            "                    AND h.status IN ('PENDING', 'ACCEPTED') ) )")
     List<Validation> findActiveTicketsByUserId(@Param("userId") Long userId);
 
     @Query("SELECT v FROM Validation v " +

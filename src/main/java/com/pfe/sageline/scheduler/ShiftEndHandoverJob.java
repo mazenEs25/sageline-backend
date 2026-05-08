@@ -24,6 +24,7 @@ public class ShiftEndHandoverJob {
      * for those that have no existing pending/accepted handover (idempotent).
      */
     @Scheduled(cron = "0 45 16 * * MON-FRI")
+    //@Scheduled(cron = "0 */1 * * * *")
     public void triggerShiftEndHandovers() {
         log.info("[ShiftEndHandoverJob] Starting shift-end handover sweep");
 

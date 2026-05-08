@@ -9,6 +9,7 @@ import com.pfe.sageline.enums.AssignmentStatus;
 import com.pfe.sageline.enums.TriggerType;
 import com.pfe.sageline.exception.ValidationException;
 import com.pfe.sageline.repository.ValidationAssignmentRepository;
+import com.pfe.sageline.scheduler.ShiftEndHandoverJob;
 import com.pfe.sageline.service.HandoverService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,6 +31,7 @@ public class HandoverController {
     private final HandoverService handoverService;
     private final SecurityUtils securityUtils;
     private final ValidationAssignmentRepository assignmentRepository;
+    private final ShiftEndHandoverJob shiftEndHandoverJob;
 
     /**
      * US3/US5 — Initiate a manual or forced handover on an in-progress ticket.
@@ -46,6 +48,19 @@ public class HandoverController {
 
         TriggerType trigger = resolveTrigger(validationId);
         return ResponseEntity.ok(handoverService.initiateHandover(validationId, req, trigger));
+    }
+
+    /**
+     * Debug endpoint: fires the shift-end sweep on demand. Same logic as the
+     * @Scheduled job, but runs synchronously so the caller sees the full
+     * outcome in the response. Restrict to ADMIN_IT — never expose in prod.
+     */
+    @Operation(summary = "[DEBUG] Lancer manuellement la passation automatique de fin de shift")
+    @PostMapping("/debug/run-shift-end-sweep")
+    @PreAuthorize("hasRole('ADMIN_IT')")
+    public ResponseEntity<String> runShiftEndSweep() {
+        shiftEndHandoverJob.triggerShiftEndHandovers();
+        return ResponseEntity.ok("Sweep terminé — vérifiez le log backend pour les détails.");
     }
 
     /**
