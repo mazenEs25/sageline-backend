@@ -105,6 +105,7 @@ Handover endpoints (`/api/handovers`):
 
 ## Key Services
 
+- `PosteCatalogService` — manages the reference catalog of measure templates per `PosteType`; read-only by any authenticated role; create/update/delete restricted to `ADMIN_IT`/`CHEF_SECTEUR`; supports batch atomic operations (`/api/poste-catalog/**` endpoints)
 - `AIPredictionService` — calls Python ML service at `/predict`, calculates deviations, falls back to defaults if unavailable
 - `KPIService` — conformity rate calculations, dashboard generation, auto-recalculates on validation closure
 - `ValidationService` — orchestrates the full ticket lifecycle, triggers AI predictions and KPI updates
@@ -123,10 +124,11 @@ Handover endpoints (`/api/handovers`):
 
 - All entities use Lombok — no manual getters/setters
 - DTOs split into `dtos/request/` and `dtos/response/` packages
-- `application.properties` has `spring.jpa.hibernate.ddl-auto=update` (auto-schema migration)
+- **Schema management**: Flyway owns all database migrations via `src/main/resources/db/migration/V*.sql` files; `spring.jpa.hibernate.ddl-auto=validate` (strict — never `update` or `create`); Flyway auto-creates baseline on first run
 - SQL logging is enabled (`spring.jpa.show-sql=true`, `hibernate.format_sql=true`)
 - Repository queries use JPQL with `LEFT JOIN FETCH` to avoid N+1 problems
 - `@PreAuthorize` annotations on controller methods are the primary access control — `SecurityConfig` URL rules are a secondary layer
+- JPA auditing wired to `SecurityUtils.getCurrentUserId()` for `@CreatedBy`/`@LastModifiedBy` columns
 
 ## API Documentation
 

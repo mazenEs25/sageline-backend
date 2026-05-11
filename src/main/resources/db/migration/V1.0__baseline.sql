@@ -1,0 +1,29 @@
+-- ============================================================================
+-- V1.0__baseline.sql
+-- Flyway baseline marker for SageLine.
+--
+-- Adoption context:
+--   - Until this phase, the schema was managed by Hibernate `ddl-auto=update`.
+--   - All existing tables (users, validation, validation_zone, secteur, phase,
+--     ticket_handover, notification, conversation, message, etc.) live in dev
+--     and prod databases already.
+--   - Flyway is now introduced. `spring.flyway.baseline-on-migrate=true` plus
+--     `spring.flyway.baseline-version=1.0` instructs Flyway, on first contact
+--     with a NON-EMPTY existing schema, to baseline at version 1.0 — so this
+--     file is intentionally a no-op for those databases, and migrations V0.x
+--     (pre-existing line-ticket / handover patches) are likewise treated as
+--     already-applied and skipped.
+--
+-- Fresh databases (CI / Testcontainers / brand-new installs):
+--   - The integration test suite does NOT use Flyway; it bootstraps tables via
+--     Hibernate `ddl-auto=create-drop` against Testcontainers (see
+--     `src/test/resources/application-test.properties` and
+--     `PostgresTestcontainer`). Tests then apply only the catalog-specific
+--     migration deltas (V1.1, V1.2) programmatically.
+--   - If a fresh non-test database is ever needed via Flyway, a future
+--     V0.0__full_schema.sql containing the complete pg_dump --schema-only
+--     output should be added; not in scope for this phase.
+-- ============================================================================
+
+-- Intentionally no DDL. Presence of this file marks v1.0 as the Flyway
+-- baseline version for any database first encountered with the new tooling.
