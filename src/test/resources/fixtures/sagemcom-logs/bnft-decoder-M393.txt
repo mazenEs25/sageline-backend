@@ -1,0 +1,59 @@
+[TEST_FONCTIONNEL] BNFT Decoder Bench - Supervisor Log M393
+Generated: 2026-05-10
+Equipment: M393 BNFT Decoder
+
+=== Measures Executed ===
+
+Measure: MES_BNFT_PWR0_2G
+Label: BNFT Power 2G Channel 0
+Category: POWER
+Unit: dBm
+Min: -20.0, Max: 10.0
+Status: 0 (OK)
+Measured Value: -5.2
+
+Measure: MES_BNFT_PWR1_2G
+Label: BNFT Power 2G Channel 1
+Category: POWER
+Unit: dBm
+Min: -20.0, Max: 10.0
+Status: 0 (OK)
+Measured Value: -4.8
+
+Measure: MES_BNFT_PWR0_5G
+Label: BNFT Power 5G Channel 0
+Category: POWER
+Unit: dBm
+Min: -15.0, Max: 15.0
+Status: 0 (OK)
+Measured Value: 2.1
+
+Measure: MES_BNFT_PWR1_5G
+Label: BNFT Power 5G Channel 1
+Category: POWER
+Unit: dBm
+Min: -15.0, Max: 15.0
+Status: 0 (OK)
+Measured Value: 2.3
+
+Measure: MES_BNFT_PWR0_BT
+Label: BNFT Power Bluetooth
+Category: POWER
+Unit: dBm
+Min: -25.0, Max: 5.0
+Status: 0 (OK)
+Measured Value: -8.5
+
+Measure: Temps_Test
+Label: Test Duration
+Category: TIME
+Unit: s
+Min: 1.0, Max: 60.0
+Status: 0 (OK)
+Measured Value: 45.3
+
+=== Test Summary ===
+Total Measures: 6
+Passed: 6
+Failed: 0
+Execution Time: 45.3 seconds

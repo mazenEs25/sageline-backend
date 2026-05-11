@@ -1,0 +1,373 @@
+openapi: 3.0.3
+info:
+  title: SageLine — PosteType Catalog API (Phase 001)
+  description: |
+    Reference catalog of measure templates per PosteType.
+    Consumed by Phase 002 (ValidationMeasure), Phase 003 (Workflow Guard),
+    Phase 004 (Log Importer), Phase 006 (KPIs).
+    All endpoints require a valid Keycloak JWT (Bearer).
+  version: 1.0.0
+servers:
+  - url: http://localhost:8089
+    description: Local development
+security:
+  - bearerAuth: []
+paths:
+  /api/poste-catalog:
+    get:
+      summary: List all measure templates (optionally filtered).
+      tags: [poste-catalog]
+      parameters:
+        - in: query
+          name: posteType
+          schema: { $ref: '#/components/schemas/PosteType' }
+          required: false
+        - in: query
+          name: includeInactive
+          schema: { type: boolean, default: false }
+          required: false
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PosteMeasureCatalogResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/poste-catalog/postes:
+    get:
+      summary: List PosteType values that have at least one active template (FR-021).
+      tags: [poste-catalog]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PosteType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/poste-catalog/{posteType}:
+    get:
+      summary: Full catalog for one PosteType (sorted by displayOrder).
+      tags: [poste-catalog]
+      parameters:
+        - in: path
+          name: posteType
+          required: true
+          schema: { $ref: '#/components/schemas/PosteType' }
+        - in: query
+          name: includeInactive
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: OK (empty array if no templates).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PosteMeasureCatalogResponse' }
+        '400':
+          description: Unknown PosteType value.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/poste-catalog/{posteType}/measures:
+    get:
+      summary: |
+        Measures-only stream for the given PosteType. Same shape as the parent
+        endpoint; provided for downstream backend services that need the minimal
+        list without additional metadata wrappers (FR-008).
+      tags: [poste-catalog]
+      parameters:
+        - in: path
+          name: posteType
+          required: true
+          schema: { $ref: '#/components/schemas/PosteType' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PosteMeasureCatalogResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/poste-catalog/measures/{id}:
+    get:
+      summary: Retrieve a single template by id (FR-009).
+      tags: [poste-catalog]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PosteMeasureCatalogResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Template not found. }
+    put:
+      summary: Update an existing template (FR-011). Restricted to ADMIN_IT and CHEF_SECTEUR.
+      tags: [poste-catalog]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PosteMeasureCatalogUpdateRequest' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PosteMeasureCatalogResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Template not found. }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      summary: Soft-delete a template (FR-012). Restricted to ADMIN_IT and CHEF_SECTEUR.
+      tags: [poste-catalog]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204': { description: Deactivated. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Template not found. }
+
+  /api/poste-catalog/measures:
+    post:
+      summary: Create a single template (FR-010). Restricted to ADMIN_IT and CHEF_SECTEUR.
+      tags: [poste-catalog]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PosteMeasureCatalogRequest' }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PosteMeasureCatalogResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/DuplicateConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/poste-catalog/measures/batch:
+    post:
+      summary: |
+        Atomic batch create for one PosteType (FR-013). Restricted to ADMIN_IT and
+        CHEF_SECTEUR. Either all items persist or none do; partial success is
+        impossible.
+      tags: [poste-catalog]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PosteMeasureCatalogBatchRequest' }
+      responses:
+        '201':
+          description: All items created.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PosteMeasureCatalogResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/DuplicateConflict' }
+        '422':
+          description: One or more items failed validation; no rows persisted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchValidationError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    PosteType:
+      type: string
+      enum:
+        - ACC
+        - TEST_FONCTIONNEL
+        - WIFI_CONDUIT
+        - WIFI_RY
+        - BANC_RX_TX
+        - BANC_SENSI
+        - BANC_TT
+        - BANC_TX
+        - AQ_LIGNE
+        - TELECHARGEMENT
+        - BANC_NFT
+        - BANC_NFT_BOUTON
+        - TEST_BOUTON
+        - TEST_VISION
+        - TEST_DOCSIS
+        - TEST_SYNCHRO_GPON
+        - BANC_AUDIO_VIDEO
+        - BANC_WIFI_CONDUIT
+        - BPO
+        - FSOS
+        - BANC_ETANCHEITE
+        - BANC_ACOUSTIQUE
+    MeasureCategory:
+      type: string
+      enum: [POWER, VOLTAGE, CURRENT, FREQUENCY, TIME, TEMPERATURE, PER, RSSI, EVM, OTHER]
+    PosteMeasureCatalogRequest:
+      type: object
+      required: [posteType, measureCode, measureLabel, category, defaultUnit, defaultLowerBound, defaultUpperBound]
+      properties:
+        posteType:           { $ref: '#/components/schemas/PosteType' }
+        measureCode:         { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$', example: 'POWER_RMS_AVG_VSA1' }
+        measureLabel:        { type: string, maxLength: 255 }
+        category:            { $ref: '#/components/schemas/MeasureCategory' }
+        defaultUnit:         { type: string, maxLength: 16, example: 'dBm' }
+        defaultLowerBound:   { type: number, format: double, example: 13.5 }
+        defaultUpperBound:   { type: number, format: double, example: 16.5 }
+        mandatory:           { type: boolean, default: false }
+        displayOrder:        { type: integer, nullable: true, default: 0 }
+        antenna:             { type: string, nullable: true, maxLength: 16, example: 'ANT1' }
+        frequencyMhz:        { type: integer, nullable: true, minimum: 0, example: 5500 }
+        modulationScheme:    { type: string, nullable: true, maxLength: 32 }
+    PosteMeasureCatalogUpdateRequest:
+      type: object
+      description: All fields optional; posteType and measureCode are NOT mutable.
+      properties:
+        measureLabel:        { type: string, maxLength: 255 }
+        category:            { $ref: '#/components/schemas/MeasureCategory' }
+        defaultUnit:         { type: string, maxLength: 16 }
+        defaultLowerBound:   { type: number, format: double }
+        defaultUpperBound:   { type: number, format: double }
+        mandatory:           { type: boolean }
+        displayOrder:        { type: integer }
+        active:              { type: boolean, description: 'Set true to reactivate; set false to soft-delete.' }
+        antenna:             { type: string, nullable: true, maxLength: 16 }
+        frequencyMhz:        { type: integer, nullable: true, minimum: 0 }
+        modulationScheme:    { type: string, nullable: true, maxLength: 32 }
+    PosteMeasureCatalogBatchRequest:
+      type: object
+      required: [posteType, items]
+      properties:
+        posteType: { $ref: '#/components/schemas/PosteType' }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [measureCode, measureLabel, category, defaultUnit, defaultLowerBound, defaultUpperBound]
+            properties:
+              measureCode:       { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }
+              measureLabel:      { type: string, maxLength: 255 }
+              category:          { $ref: '#/components/schemas/MeasureCategory' }
+              defaultUnit:       { type: string, maxLength: 16 }
+              defaultLowerBound: { type: number, format: double }
+              defaultUpperBound: { type: number, format: double }
+              mandatory:         { type: boolean, default: false }
+              displayOrder:      { type: integer, default: 0 }
+              antenna:           { type: string, nullable: true }
+              frequencyMhz:      { type: integer, nullable: true }
+              modulationScheme:  { type: string, nullable: true }
+    PosteMeasureCatalogResponse:
+      type: object
+      properties:
+        id:                  { type: integer, format: int64 }
+        posteType:           { $ref: '#/components/schemas/PosteType' }
+        measureCode:         { type: string }
+        measureLabel:        { type: string }
+        category:            { $ref: '#/components/schemas/MeasureCategory' }
+        defaultUnit:         { type: string }
+        defaultLowerBound:   { type: number, format: double }
+        defaultUpperBound:   { type: number, format: double }
+        mandatory:           { type: boolean }
+        displayOrder:        { type: integer }
+        active:              { type: boolean }
+        antenna:             { type: string, nullable: true }
+        frequencyMhz:        { type: integer, nullable: true }
+        modulationScheme:    { type: string, nullable: true }
+        createdAt:           { type: string, format: date-time }
+        createdBy:           { type: integer, format: int64, nullable: true }
+        updatedAt:           { type: string, format: date-time }
+        updatedBy:           { type: integer, format: int64, nullable: true }
+    BatchValidationError:
+      type: object
+      properties:
+        message: { type: string, example: 'Batch rejected; no rows persisted.' }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              index:   { type: integer, example: 3 }
+              field:   { type: string, nullable: true, example: 'defaultLowerBound' }
+              code:    { type: string, example: 'INVERTED_BOUNDS' }
+              message: { type: string }
+    ApiError:
+      type: object
+      properties:
+        timestamp: { type: string, format: date-time }
+        status:    { type: integer }
+        error:     { type: string }
+        message:   { type: string }
+        path:      { type: string }
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Forbidden:
+      description: Authenticated user lacks the required role (ADMIN_IT or CHEF_SECTEUR).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    DuplicateConflict:
+      description: A second active template would violate (posteType, measureCode) uniqueness.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiError'
+              - type: object
+                properties:
+                  conflictingCodes:
+                    type: array
+                    items: { type: string }
+    ValidationError:
+      description: Request failed validation (missing field, inverted bounds, bad enum, etc.).
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiError'
+              - type: object
+                properties:
+                  fieldErrors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field:   { type: string }
+                        code:    { type: string }
+                        message: { type: string }

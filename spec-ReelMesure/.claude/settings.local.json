@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"$PWD\\\\.specify\\\\scripts\\\\powershell\\\\check-prerequisites.ps1\" -Json -PathsOnly)",
+      "PowerShell(& \"$PWD\\\\.specify\\\\scripts\\\\powershell\\\\setup-plan.ps1\" -Json)",
+      "Read(//c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/src/main/resources/db/**)",
+      "Read(//c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/**)",
+      "PowerShell(& \"$PWD\\\\.specify\\\\scripts\\\\powershell\\\\setup-tasks.ps1\" -Json)",
+      "PowerShell(& \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\\\\spec-ReelMesure\\\\.claude\\\\skills\\\\speckit-implement\\\\check-prerequisites.ps1\" -Json -RequireTasks -IncludeTasks)",
+      "PowerShell($env:PGPASSWORD='123456'; & 'pg_dump.exe' --schema-only -U postgres -h localhost sageLine_db 2>&1 | Select-Object -First 100)",
+      "Bash(mvn clean *)",
+      "PowerShell(mkdir *)",
+      "Bash(./mvnw compile *)",
+      "Bash(mv \"2026-04-line-ticket-migration.sql\" \"V0.1__line_ticket_migration.sql\")",
+      "Bash(mv \"2026-05-handover-status-constraints.sql\" \"V0.2__handover_status_constraints.sql\")",
+      "Read(//c/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/src/main/resources/db/**)",
+      "PowerShell(Test-Path *)",
+      "PowerShell($env:JAVA_HOME = 'C:\\\\Program Files\\\\Java\\\\jdk-17'; Set-Location 'C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend'; cmd /c \"mvnw.cmd clean compile 2>&1\" | Select-Object -Last 100)",
+      "PowerShell($env:JAVA_HOME = 'C:\\\\Program Files\\\\Java\\\\jdk-17'; Set-Location 'C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend'; cmd /c \".\\\\mvnw.cmd clean compile 2>&1\" | Select-Object -Last 120)",
+      "PowerShell($env:JAVA_HOME = 'C:\\\\Program Files\\\\Java\\\\jdk-17'; Set-Location 'C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend'; cmd /c \".\\\\mvnw.cmd clean compile -q 2>&1\" | Select-Object -Last 30)",
+      "PowerShell($env:JAVA_HOME = 'C:\\\\Program Files\\\\Java\\\\jdk-17'; Set-Location 'C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend'; cmd /c \".\\\\mvnw.cmd dependency:resolve -q 2>&1\" | Select-String -Pattern \"spring-boot-flyway|spring-boot-hibernate|ERROR|BUILD\" | Select-Object -Last 30)",
+      "PowerShell($env:JAVA_HOME = 'C:\\\\Program Files\\\\Java\\\\jdk-17'; Set-Location 'C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend'; cmd /c \".\\\\mvnw.cmd dependency:tree -DoutputFile=deptree.txt 2>&1\" | Select-Object -Last 15; Write-Output \"---\"; if \\(Test-Path deptree.txt\\) { Select-String -Path deptree.txt -Pattern \"flyway|spring-boot-flyway|spring-boot-jdbc|spring-boot-hibernate\" })",
+      "PowerShell($env:JAVA_HOME = 'C:\\\\Program Files\\\\Java\\\\jdk-17'; Set-Location 'C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend'; cmd /c \".\\\\mvnw.cmd process-resources -q 2>&1\" | Select-Object -Last 10; Write-Output \"---target---\"; Get-ChildItem 'target\\\\classes\\\\db\\\\migration\\\\' | Format-Table Name)"
+    ]
+  }
+}

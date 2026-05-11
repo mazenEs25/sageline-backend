@@ -1,0 +1,123 @@
+[WIFI_CONDUIT] BWC WiFi Gateway Safran WiFi5G - Supervisor Log
+Generated: 2026-05-10
+Equipment: Safran WiFi 5G Gateway
+
+=== Measures Executed ===
+
+Measure: POWER_RMS_AVG_VSA1
+Label: Power RMS Average VSA1
+Category: POWER
+Unit: dBm
+Min: -40.0, Max: 20.0
+Status: 0 (OK)
+Measured Value: -15.2
+
+Measure: POWER_RMS_AVG_VSA2
+Label: Power RMS Average VSA2
+Category: POWER
+Unit: dBm
+Min: -40.0, Max: 20.0
+Status: 0 (OK)
+Measured Value: -14.8
+
+Measure: POWER_RMS_AVG_VSA3
+Label: Power RMS Average VSA3
+Category: POWER
+Unit: dBm
+Min: -40.0, Max: 20.0
+Status: 0 (OK)
+Measured Value: -16.1
+
+Measure: POWER_RMS_AVG_VSA4
+Label: Power RMS Average VSA4
+Category: POWER
+Unit: dBm
+Min: -40.0, Max: 20.0
+Status: 0 (OK)
+Measured Value: -15.5
+
+Measure: EVM_2G_VSA1
+Label: EVM 2.4GHz VSA1
+Category: EVM
+Unit: %
+Measured Value: 3.2
+
+Measure: EVM_2G_VSA2
+Label: EVM 2.4GHz VSA2
+Category: EVM
+Unit: %
+Measured Value: 3.5
+
+Measure: EVM_2G_VSA3
+Label: EVM 2.4GHz VSA3
+Category: EVM
+Unit: %
+Measured Value: 3.1
+
+Measure: EVM_2G_VSA4
+Label: EVM 2.4GHz VSA4
+Category: EVM
+Unit: %
+Measured Value: 3.4
+
+Measure: EVM_5G_VSA1
+Label: EVM 5GHz VSA1
+Category: EVM
+Unit: %
+Measured Value: 4.1
+
+Measure: EVM_5G_VSA2
+Label: EVM 5GHz VSA2
+Category: EVM
+Unit: %
+Measured Value: 4.3
+
+Measure: EVM_5G_VSA3
+Label: EVM 5GHz VSA3
+Category: EVM
+Unit: %
+Measured Value: 4.0
+
+Measure: EVM_5G_VSA4
+Label: EVM 5GHz VSA4
+Category: EVM
+Unit: %
+Measured Value: 4.2
+
+Measure: RSSI_2G_CH1
+Label: RSSI 2.4GHz Channel 1
+Category: RSSI
+Unit: dBm
+Min: -100.0, Max: -20.0
+Status: 0 (OK)
+Measured Value: -45.2
+
+Measure: RSSI_5G_CH36
+Label: RSSI 5GHz Channel 36
+Category: RSSI
+Unit: dBm
+Min: -100.0, Max: -20.0
+Status: 0 (OK)
+Measured Value: -48.5
+
+Measure: FREQUENCY_OFFSET_2G
+Label: Frequency Offset 2.4GHz
+Category: FREQUENCY
+Unit: ppm
+Min: -2.0, Max: 2.0
+Status: 0 (OK)
+Measured Value: 0.5
+
+Measure: FREQUENCY_OFFSET_5G
+Label: Frequency Offset 5GHz
+Category: FREQUENCY
+Unit: ppm
+Min: -2.0, Max: 2.0
+Status: 0 (OK)
+Measured Value: 0.3
+
+=== Test Summary ===
+Total Measures: 16
+Passed: 16
+Failed: 0
+Execution Time: 125.4 seconds

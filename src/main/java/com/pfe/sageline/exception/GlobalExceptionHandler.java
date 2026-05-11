@@ -12,6 +12,7 @@ import org.springframework.web.context.request.WebRequest;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 @RestControllerAdvice
 @Slf4j
@@ -101,6 +102,68 @@ public class GlobalExceptionHandler {
         );
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
+     * Gestion des erreurs de template catalogue en doublon (409)
+     */
+    @ExceptionHandler(DuplicateCatalogTemplateException.class)
+    public ResponseEntity<ConflictErrorResponse> handleDuplicateCatalogTemplateException(
+            DuplicateCatalogTemplateException ex,
+            WebRequest request) {
+
+        log.error("Duplicate catalog template: {}", ex.getMessage());
+
+        ConflictErrorResponse errorResponse = new ConflictErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                ex.getMessage(),
+                LocalDateTime.now(),
+                request.getDescription(false),
+                ex.getConflictingCodes()
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    /**
+     * Gestion des erreurs de violation des bornes (422)
+     */
+    @ExceptionHandler(BoundsViolationException.class)
+    public ResponseEntity<ErrorResponse> handleBoundsViolationException(
+            BoundsViolationException ex,
+            WebRequest request) {
+
+        log.error("Bounds violation: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                ex.getMessage(),
+                LocalDateTime.now(),
+                request.getDescription(false)
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    /**
+     * Gestion des erreurs de validation batch (422)
+     */
+    @ExceptionHandler(BatchValidationException.class)
+    public ResponseEntity<BatchErrorResponse> handleBatchValidationException(
+            BatchValidationException ex,
+            WebRequest request) {
+
+        log.error("Batch validation error: {}", ex.getMessage());
+
+        BatchErrorResponse errorResponse = new BatchErrorResponse(
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                ex.getMessage(),
+                LocalDateTime.now(),
+                request.getDescription(false),
+                ex.getErrors()
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     /**
