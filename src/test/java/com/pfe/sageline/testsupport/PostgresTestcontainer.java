@@ -4,32 +4,29 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Shared Postgres Testcontainer base. Deliberately does NOT carry
- * {@code @SpringBootTest} or {@code @DataJpaTest} so subclasses can choose
- * their own slice annotation (e.g. {@code @DataJpaTest} for repository tests,
- * {@code @SpringBootTest(webEnvironment = NONE)} for full-context tests,
- * {@code @WebMvcTest} for controller-only tests with mocked services).
+ * Shared Postgres Testcontainer base. Uses the singleton-container pattern:
+ * the container is started once via a static initializer when this class is
+ * first loaded, and lives until the JVM exits (no per-class stop/restart).
  *
- * <p>The container is started once per JVM and reused across test classes.
- * Hibernate creates tables from the entities (see
- * {@code application-test.properties}); the catalog-specific deltas (partial
- * unique index + reference seed) are applied by {@link CatalogSchemaInitializer}.
+ * <p>Deliberately does NOT carry {@code @SpringBootTest} so subclasses can
+ * choose their own slice annotation. The {@code @DynamicPropertySource} wires
+ * the datasource URL for every Spring context that inherits from this class.
  */
-@Testcontainers
 @ActiveProfiles("test")
 public abstract class PostgresTestcontainer {
 
-    @Container
-    public static final PostgreSQLContainer<?> POSTGRES =
-        new PostgreSQLContainer<>("postgres:15")
-            .withDatabaseName("test_sageline_db")
-            .withUsername("postgres")
-            .withPassword("postgres")
-            .withReuse(true);
+    public static final PostgreSQLContainer<?> POSTGRES;
+
+    static {
+        POSTGRES = new PostgreSQLContainer<>("postgres:15")
+                .withDatabaseName("test_sageline_db")
+                .withUsername("postgres")
+                .withPassword("postgres")
+                .withReuse(true);
+        POSTGRES.start();
+    }
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {

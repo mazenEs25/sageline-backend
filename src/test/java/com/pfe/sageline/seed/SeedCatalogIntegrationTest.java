@@ -7,6 +7,8 @@ import com.pfe.sageline.testsupport.PostgresTestcontainer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.StreamUtils;
@@ -25,6 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class SeedCatalogIntegrationTest extends PostgresTestcontainer {
+
+    @MockitoBean JwtDecoder jwtDecoder;
 
     @Autowired private PosteMeasureCatalogRepository repository;
     @Autowired private JdbcTemplate jdbc;

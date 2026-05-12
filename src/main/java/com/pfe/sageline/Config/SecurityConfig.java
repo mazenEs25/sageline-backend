@@ -97,6 +97,13 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.PATCH, "/api/validations/*/close").hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "EXPERT")
                                 .requestMatchers(HttpMethod.PATCH, "/api/validations/*/cancel").hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
 
+                        // ─── VALIDATION MEASURE ENDPOINTS ───
+                        // Measures CRUD: TECH_VAL, TECH_PREP, ADMIN_IT (must come before generic /api/validations/**)
+                        .requestMatchers(HttpMethod.POST, "/api/validations/*/measures").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
+                        .requestMatchers(HttpMethod.POST, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
+                        .requestMatchers(HttpMethod.PUT, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
+                        .requestMatchers(HttpMethod.DELETE, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
+
                         // ─── VALIDATION ENDPOINTS ───
                         // Create/close validations: TECH_VALIDATION, CHEF_SECTEUR, ADMIN_IT
                         .requestMatchers(HttpMethod.POST, "/api/validations/**")

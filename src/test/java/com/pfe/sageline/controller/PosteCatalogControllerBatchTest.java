@@ -1,6 +1,7 @@
 package com.pfe.sageline.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pfe.sageline.Config.SecurityUtils;
 import com.pfe.sageline.dtos.request.PosteMeasureCatalogBatchRequest;
 import com.pfe.sageline.dtos.response.PosteMeasureCatalogResponse;
 import com.pfe.sageline.enums.MeasureCategory;
@@ -8,11 +9,16 @@ import com.pfe.sageline.enums.PosteType;
 import com.pfe.sageline.exception.BatchValidationException;
 import com.pfe.sageline.exception.DuplicateCatalogTemplateException;
 import com.pfe.sageline.service.PosteCatalogService;
+import com.pfe.sageline.testsupport.PostgresTestcontainer;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.MockBean;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -23,17 +29,22 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.hamcrest.Matchers.*;
 
-@WebMvcTest(PosteCatalogController.class)
-public class PosteCatalogControllerBatchTest {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+public class PosteCatalogControllerBatchTest extends PostgresTestcontainer {
 
-    @Autowired
+    @Autowired WebApplicationContext wac;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    @MockitoBean PosteCatalogService posteCatalogService;
+    @MockitoBean SecurityUtils securityUtils;
+
     private MockMvc mockMvc;
 
-    @MockBean
-    private PosteCatalogService posteCatalogService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(wac)
+                .apply(SecurityMockMvcConfigurers.springSecurity())
+                .build();
+    }
 
     private PosteMeasureCatalogResponse createResponse(Long id, String code) {
         return new PosteMeasureCatalogResponse(

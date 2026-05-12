@@ -112,6 +112,7 @@ Handover endpoints (`/api/handovers`):
 - `HandoverService` / `HandoverServiceImpl` — full shift-end handover protocol (US1–US7)
 - `AnomalyDetectionService` / `ToolRecommendationService` — AI-output management
 - `NotificationService` — creates and pushes notifications over WebSocket
+- `ValidationMeasureService` — manages bounded-tolerance industrial measures per ticket; auto-classifies via MeasureDeviationCalculator; gated to EN_COURS by MeasureEditabilityGuard (Phase 002)
 
 ## WebSocket
 

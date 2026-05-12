@@ -1,8 +1,11 @@
 package com.pfe.sageline.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -11,6 +14,7 @@ import org.springframework.web.context.request.WebRequest;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -164,6 +168,71 @@ public class GlobalExceptionHandler {
         );
 
         return new ResponseEntity<>(errorResponse, HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    @ExceptionHandler(MeasureNotEditableException.class)
+    public ResponseEntity<Map<String, Object>> handleMeasureNotEditable(MeasureNotEditableException ex) {
+        log.error("Measure not editable: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", 422);
+        body.put("error", "TICKET_NOT_EDITABLE");
+        body.put("message", ex.getMessage());
+        body.put("ticketId", ex.getTicketId());
+        body.put("currentStatus", ex.getCurrentStatus());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
+    @ExceptionHandler(BatchMeasureValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleBatchMeasureValidation(BatchMeasureValidationException ex) {
+        log.error("Batch measure validation error: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", "BATCH_REJECTED");
+        body.put("totalEntries", ex.getTotalEntries());
+        body.put("failedEntries", ex.getFailedEntries());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex) {
+        String msg = ex.getMessage() != null ? ex.getMessage() : "";
+        String cause = ex.getCause() != null && ex.getCause().getMessage() != null
+                ? ex.getCause().getMessage() : "";
+        boolean isNaturalKeyViolation = (msg.contains("uq_vm_natural_key") || cause.contains("uq_vm_natural_key"))
+                && (cause.contains("23505") || msg.contains("23505")
+                    || (ex.getCause() != null && ex.getCause().getClass().getName().contains("PSQLException")
+                        && cause.contains("uq_vm_natural_key")));
+
+        if (isNaturalKeyViolation || (cause.contains("uq_vm_natural_key"))) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("status", 409);
+            body.put("error", "DUPLICATE_MEASURE");
+            body.put("message", "Duplicate measure on this ticket for the given (code, antenna, frequency, modulation)");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+        }
+        throw ex;
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDeniedException(
+            AccessDeniedException ex,
+            WebRequest request) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.FORBIDDEN.value(),
+                "Access denied",
+                LocalDateTime.now(),
+                request.getDescription(false)
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleMessageNotReadable(HttpMessageNotReadableException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", 400);
+        body.put("error", "Bad Request");
+        body.put("message", ex.getMostSpecificCause().getMessage());
+        return ResponseEntity.badRequest().body(body);
     }
 
     /**
