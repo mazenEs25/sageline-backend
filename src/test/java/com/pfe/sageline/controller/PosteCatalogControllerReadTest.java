@@ -1,15 +1,21 @@
 package com.pfe.sageline.controller;
 
+import com.pfe.sageline.Config.SecurityUtils;
 import com.pfe.sageline.dtos.response.PosteMeasureCatalogResponse;
 import com.pfe.sageline.enums.MeasureCategory;
 import com.pfe.sageline.enums.PosteType;
 import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.service.PosteCatalogService;
+import com.pfe.sageline.testsupport.PostgresTestcontainer;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.MockBean;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.time.Instant;
 import java.util.List;
@@ -19,14 +25,21 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.hamcrest.Matchers.*;
 
-@WebMvcTest(PosteCatalogController.class)
-public class PosteCatalogControllerReadTest {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+public class PosteCatalogControllerReadTest extends PostgresTestcontainer {
 
-    @Autowired
+    @Autowired WebApplicationContext wac;
+    @MockitoBean PosteCatalogService posteCatalogService;
+    @MockitoBean SecurityUtils securityUtils;
+
     private MockMvc mockMvc;
 
-    @MockBean
-    private PosteCatalogService posteCatalogService;
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(wac)
+                .apply(SecurityMockMvcConfigurers.springSecurity())
+                .build();
+    }
 
     private PosteMeasureCatalogResponse createResponse(Long id, String code, PosteType poste, int displayOrder) {
         return new PosteMeasureCatalogResponse(

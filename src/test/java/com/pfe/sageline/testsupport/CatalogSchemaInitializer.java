@@ -31,10 +31,20 @@ public class CatalogSchemaInitializer {
     public void initialize() throws Exception {
         applyPartialUniqueIndex();
         applyCheckConstraint();
+        applyValidationMeasuresConstraints();
         loadSeed();
     }
 
+    private boolean tableExists(String tableName) {
+        Boolean exists = jdbc.queryForObject(
+            "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = ?)",
+            Boolean.class, tableName
+        );
+        return Boolean.TRUE.equals(exists);
+    }
+
     private void applyPartialUniqueIndex() {
+        if (!tableExists("poste_measure_catalog")) return;
         jdbc.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS uk_poste_measure_catalog_active " +
             "ON poste_measure_catalog (poste_type, measure_code) WHERE active = true"
@@ -42,7 +52,7 @@ public class CatalogSchemaInitializer {
     }
 
     private void applyCheckConstraint() {
-        // Hibernate doesn't emit the bounds CHECK from the entity, so we add it here.
+        if (!tableExists("poste_measure_catalog")) return;
         Integer exists = jdbc.queryForObject(
             "SELECT COUNT(*) FROM pg_constraint WHERE conname = 'chk_poste_measure_catalog_bounds'",
             Integer.class
@@ -56,10 +66,31 @@ public class CatalogSchemaInitializer {
         }
     }
 
+    private void applyValidationMeasuresConstraints() {
+        if (!tableExists("validation_measures")) return;
+        jdbc.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_vm_natural_key ON validation_measures(" +
+            "validation_id, measure_code, COALESCE(antenna,''), COALESCE(frequency_mhz,-1), COALESCE(modulation_scheme,''))"
+        );
+        Integer boundsExists = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM pg_constraint WHERE conname = 'ck_vm_bounds'", Integer.class);
+        if (boundsExists != null && boundsExists == 0) {
+            jdbc.execute("ALTER TABLE validation_measures ADD CONSTRAINT ck_vm_bounds CHECK (lower_bound < upper_bound)");
+        }
+        Integer devExists = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM pg_constraint WHERE conname = 'ck_vm_deviation_consistency'", Integer.class);
+        if (devExists != null && devExists == 0) {
+            jdbc.execute(
+                "ALTER TABLE validation_measures ADD CONSTRAINT ck_vm_deviation_consistency CHECK (" +
+                "(measured_value IS NULL AND status = 'NOT_EXECUTED' AND deviation_pct IS NULL) OR " +
+                "(measured_value IS NOT NULL AND status IN ('OK','OUT_OF_RANGE') AND deviation_pct IS NOT NULL))");
+        }
+    }
+
     private void loadSeed() throws Exception {
+        if (!tableExists("poste_measure_catalog")) return;
         try (var stream = new ClassPathResource("db/migration/V1.2__seed_poste_catalog.sql").getInputStream()) {
             String sql = StreamUtils.copyToString(stream, StandardCharsets.UTF_8);
-            // The seed file is idempotent: ON CONFLICT for active rows, WHERE NOT EXISTS for inactive.
             jdbc.execute(sql);
         }
     }

@@ -1,39 +1,30 @@
 -- ============================================================================
 -- 2026-05 Handover status constraints migration
 -- ----------------------------------------------------------------------------
--- Purpose
---   The Handover (Passation) feature added two new enum values that the
---   existing PostgreSQL CHECK constraints do not allow yet:
---     * AssignmentStatus.PAUSED  -> validation_assignments.status
---     * TicketStatus.EN_ATTENTE_HANDOVER -> validations.status
---
---   Hibernate's `ddl-auto=update` creates new columns and tables but does NOT
---   modify existing CHECK constraints, so attempts to write the new values
---   fail with: "ERREUR: la nouvelle ligne ... viole la contrainte de
---   verification 'validation_assignments_status_check'".
---
---   This script drops and recreates each constraint with the full enum set.
---
--- Prerequisites
---   * Spring Boot must have started at least once with the 2026-05 code so
---     the enum classes are loaded (Hibernate touches them).
---   * Take a pg_dump first. The workload is tiny but the data is real.
---
--- Safety
---   * Idempotent: each block looks up the constraint name dynamically and
---     skips if not found, then recreates.
---   * No DELETE / DROP TABLE anywhere — only DROP CONSTRAINT + ADD CONSTRAINT.
+-- Drops and recreates CHECK constraints on validation_assignments and
+-- validations to include the new enum values PAUSED and EN_ATTENTE_HANDOVER.
+-- When run via Flyway on a fresh schema, each block detects missing tables
+-- and exits with a NOTICE — no-op.
 -- ============================================================================
-
-BEGIN;
 
 -- ---------------------------------------------------------------------------
 -- 1. validation_assignments.status  (add PAUSED)
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE
+    v_table_exists    BOOLEAN;
     v_constraint_name TEXT;
 BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'validation_assignments'
+    ) INTO v_table_exists;
+
+    IF NOT v_table_exists THEN
+        RAISE NOTICE 'V0.2 block 1 skipped: validation_assignments not present';
+        RETURN;
+    END IF;
+
     SELECT conname INTO v_constraint_name
     FROM pg_constraint
     WHERE conrelid = 'validation_assignments'::regclass
@@ -42,7 +33,6 @@ BEGIN
 
     IF v_constraint_name IS NOT NULL THEN
         EXECUTE format('ALTER TABLE validation_assignments DROP CONSTRAINT %I', v_constraint_name);
-        RAISE NOTICE 'Dropped constraint % on validation_assignments', v_constraint_name;
     END IF;
 
     ALTER TABLE validation_assignments
@@ -57,8 +47,19 @@ END $$;
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE
+    v_table_exists    BOOLEAN;
     v_constraint_name TEXT;
 BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'validations'
+    ) INTO v_table_exists;
+
+    IF NOT v_table_exists THEN
+        RAISE NOTICE 'V0.2 block 2 skipped: validations not present';
+        RETURN;
+    END IF;
+
     SELECT conname INTO v_constraint_name
     FROM pg_constraint
     WHERE conrelid = 'validations'::regclass
@@ -67,7 +68,6 @@ BEGIN
 
     IF v_constraint_name IS NOT NULL THEN
         EXECUTE format('ALTER TABLE validations DROP CONSTRAINT %I', v_constraint_name);
-        RAISE NOTICE 'Dropped constraint % on validations', v_constraint_name;
     END IF;
 
     ALTER TABLE validations
@@ -88,13 +88,11 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 3. (Optional) validation_poste_statuses.status — same pattern, in case the
---    poste sub-status table also has a CHECK that lists the old enum subset.
---    Skipped if the table doesn't exist or has no status CHECK.
+-- 3. validation_poste_statuses.status (optional)
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE
-    v_table_exists BOOLEAN;
+    v_table_exists    BOOLEAN;
     v_constraint_name TEXT;
 BEGIN
     SELECT EXISTS (
@@ -103,7 +101,7 @@ BEGIN
     ) INTO v_table_exists;
 
     IF NOT v_table_exists THEN
-        RAISE NOTICE 'Skipping validation_poste_statuses — table not present';
+        RAISE NOTICE 'V0.2 block 3 skipped: validation_poste_statuses not present';
         RETURN;
     END IF;
 
@@ -115,7 +113,6 @@ BEGIN
 
     IF v_constraint_name IS NOT NULL THEN
         EXECUTE format('ALTER TABLE validation_poste_statuses DROP CONSTRAINT %I', v_constraint_name);
-        RAISE NOTICE 'Dropped constraint % on validation_poste_statuses', v_constraint_name;
 
         ALTER TABLE validation_poste_statuses
             ADD CONSTRAINT validation_poste_statuses_status_check
@@ -134,13 +131,3 @@ BEGIN
         RAISE NOTICE 'Recreated validation_poste_statuses_status_check with EN_ATTENTE_HANDOVER';
     END IF;
 END $$;
-
-COMMIT;
-
--- ============================================================================
--- Verification queries — run these after the COMMIT to confirm
--- ============================================================================
--- SELECT conname, pg_get_constraintdef(oid)
--- FROM pg_constraint
--- WHERE conrelid IN ('validation_assignments'::regclass, 'validations'::regclass)
---   AND contype = 'c';

@@ -1,40 +1,54 @@
 package com.pfe.sageline.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pfe.sageline.Config.SecurityUtils;
 import com.pfe.sageline.dtos.request.PosteMeasureCatalogRequest;
 import com.pfe.sageline.dtos.request.PosteMeasureCatalogUpdateRequest;
-import com.pfe.sageline.dtos.request.PosteMeasureCatalogBatchRequest;
 import com.pfe.sageline.dtos.response.PosteMeasureCatalogResponse;
 import com.pfe.sageline.enums.MeasureCategory;
 import com.pfe.sageline.enums.PosteType;
 import com.pfe.sageline.exception.DuplicateCatalogTemplateException;
 import com.pfe.sageline.exception.BoundsViolationException;
 import com.pfe.sageline.service.PosteCatalogService;
+import com.pfe.sageline.testsupport.PostgresTestcontainer;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.MockBean;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.time.Instant;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.hamcrest.Matchers.*;
 
-@WebMvcTest(PosteCatalogController.class)
-public class PosteCatalogControllerWriteTest {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+public class PosteCatalogControllerWriteTest extends PostgresTestcontainer {
 
-    @Autowired
+    @Autowired WebApplicationContext wac;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    @MockitoBean PosteCatalogService posteCatalogService;
+    @MockitoBean SecurityUtils securityUtils;
+
     private MockMvc mockMvc;
 
-    @MockBean
-    private PosteCatalogService posteCatalogService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(wac)
+                .apply(SecurityMockMvcConfigurers.springSecurity())
+                .build();
+    }
 
     private PosteMeasureCatalogResponse createSampleResponse(Long id) {
         return new PosteMeasureCatalogResponse(
@@ -78,7 +92,7 @@ public class PosteCatalogControllerWriteTest {
 
         PosteMeasureCatalogResponse response = createSampleResponse(1L);
 
-        org.mockito.Mockito.when(posteCatalogService.create(org.mockito.ArgumentMatchers.any()))
+        when(posteCatalogService.create(any()))
             .thenReturn(response);
 
         mockMvc.perform(
@@ -134,7 +148,7 @@ public class PosteCatalogControllerWriteTest {
             null
         );
 
-        org.mockito.Mockito.when(posteCatalogService.create(org.mockito.ArgumentMatchers.any()))
+        when(posteCatalogService.create(any()))
             .thenThrow(new DuplicateCatalogTemplateException(List.of("DUP_CODE")));
 
         mockMvc.perform(
@@ -164,7 +178,7 @@ public class PosteCatalogControllerWriteTest {
             null
         );
 
-        org.mockito.Mockito.when(posteCatalogService.create(org.mockito.ArgumentMatchers.any()))
+        when(posteCatalogService.create(any()))
             .thenThrow(new BoundsViolationException("Lower bound must be less than upper bound"));
 
         mockMvc.perform(
@@ -194,7 +208,7 @@ public class PosteCatalogControllerWriteTest {
 
         PosteMeasureCatalogResponse response = createSampleResponse(1L);
 
-        org.mockito.Mockito.when(posteCatalogService.update(org.mockito.eq(1L), org.mockito.any()))
+        when(posteCatalogService.update(eq(1L), any()))
             .thenReturn(response);
 
         mockMvc.perform(
@@ -208,7 +222,7 @@ public class PosteCatalogControllerWriteTest {
 
     @Test
     public void softDelete_returns204() throws Exception {
-        org.mockito.Mockito.doNothing().when(posteCatalogService).softDelete(1L);
+        doNothing().when(posteCatalogService).softDelete(1L);
 
         mockMvc.perform(
             delete("/api/poste-catalog/measures/1")
@@ -221,7 +235,7 @@ public class PosteCatalogControllerWriteTest {
     public void getById_returns200() throws Exception {
         PosteMeasureCatalogResponse response = createSampleResponse(1L);
 
-        org.mockito.Mockito.when(posteCatalogService.getById(1L))
+        when(posteCatalogService.getById(1L))
             .thenReturn(response);
 
         mockMvc.perform(

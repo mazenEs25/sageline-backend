@@ -1,0 +1,329 @@
+openapi: 3.0.3
+info:
+  title: SageLine — ValidationMeasure API (Phase 002)
+  version: 0.2.0
+  description: |
+    Backend contract for Phase 002 of the SageLine ReelMesure refactor.
+    Six endpoints under `/api/validations/{validationId}/measures/**` for recording,
+    listing, updating, deleting, batching, and instantiating-from-catalog the
+    industrial measures attached to a validation ticket, plus the deprecation
+    header contract for the legacy `/api/validation-results` controller.
+
+servers:
+  - url: http://localhost:8089
+    description: Local dev
+
+tags:
+  - name: Measures
+  - name: Legacy
+
+paths:
+  /api/validations/{validationId}/measures:
+    get:
+      tags: [Measures]
+      summary: List all measures attached to a ticket
+      description: Open to any authenticated user with read access to the ticket.
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ValidationMeasureResponse'
+        '404': { $ref: '#/components/responses/NotFound' }
+      security: [ { bearerAuth: [] } ]
+
+    post:
+      tags: [Measures]
+      summary: Record a single measure on a ticket
+      description: |
+        Requires `TECH_VAL`, `TECH_PREP`, or `ADMIN_IT`. Owning ticket MUST be
+        in status `EN_COURS` — otherwise 422. Body MAY reference a catalog
+        `templateId` (bounds/unit copied from the template) or supply the full
+        bounded-tolerance context directly (ad-hoc).
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMeasureRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationMeasureResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+      security: [ { bearerAuth: [] } ]
+
+  /api/validations/{validationId}/measures/batch:
+    post:
+      tags: [Measures]
+      summary: Record multiple measures in a single transactional request
+      description: |
+        Requires `TECH_VAL`, `TECH_PREP`, or `ADMIN_IT`. All-or-nothing:
+        if any entry fails validation, the entire batch is rejected (HTTP 422)
+        with per-entry diagnostics; no measures are persisted.
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BatchCreateMeasureRequest' }
+      responses:
+        '201':
+          description: All entries created
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ValidationMeasureResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: Batch rejected (all-or-nothing)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchMeasureErrorResponse' }
+      security: [ { bearerAuth: [] } ]
+
+  /api/validations/{validationId}/measures/from-template:
+    post:
+      tags: [Measures]
+      summary: Instantiate all catalog templates for the ticket's poste type
+      description: |
+        Requires `TECH_VAL`, `TECH_PREP`, or `ADMIN_IT`. Ticket MUST be in
+        `EN_COURS`. Idempotent — re-invocation creates zero additional
+        measures for templates already present on the ticket.
+        Each newly created measure is in status `NOT_EXECUTED`.
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+      responses:
+        '200':
+          description: OK — returns the list of measures created by this call (possibly empty on idempotent reinvocation)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ValidationMeasureResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+      security: [ { bearerAuth: [] } ]
+
+  /api/validations/{validationId}/measures/{measureId}:
+    put:
+      tags: [Measures]
+      summary: Update an existing measure
+      description: |
+        Requires `TECH_VAL`, `TECH_PREP`, or `ADMIN_IT`. Ticket MUST be in
+        `EN_COURS`. Setting `measuredValue` to null transitions the measure
+        to `NOT_EXECUTED`. Status and deviation are always recomputed.
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+        - $ref: '#/components/parameters/MeasureId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateMeasureRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationMeasureResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+      security: [ { bearerAuth: [] } ]
+
+    delete:
+      tags: [Measures]
+      summary: Delete a measure
+      description: Requires `TECH_VAL`, `TECH_PREP`, or `ADMIN_IT`. Ticket MUST be in `EN_COURS`.
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+        - $ref: '#/components/parameters/MeasureId'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+      security: [ { bearerAuth: [] } ]
+
+  /api/validation-results:
+    get:
+      tags: [Legacy]
+      summary: Legacy validation-results endpoint (DEPRECATED)
+      description: |
+        Existing endpoint kept operational during Phase 002. Every response
+        carries `Deprecation: true`. Removal scheduled no earlier than Phase 005.
+      responses:
+        '200':
+          description: OK (legacy schema)
+          headers:
+            Deprecation:
+              schema: { type: string, example: 'true' }
+              description: Always present on legacy responses.
+      security: [ { bearerAuth: [] } ]
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ValidationId:
+      name: validationId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    MeasureId:
+      name: measureId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+
+  schemas:
+    MeasureStatus:
+      type: string
+      enum: [OK, OUT_OF_RANGE, NOT_EXECUTED]
+    MeasureCategory:
+      type: string
+      enum: [POWER, VOLTAGE, CURRENT, FREQUENCY, TIME, TEMPERATURE, PER, RSSI, EVM, OTHER]
+
+    CreateMeasureRequest:
+      type: object
+      required: [measureCode, measureLabel, category, unit, lowerBound, upperBound]
+      properties:
+        templateId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Catalog template id. When provided, server may override `measureCode`/`unit`/`lowerBound`/`upperBound`/etc. from the template.
+        measureCode: { type: string, maxLength: 64, pattern: '^[A-Z0-9_]+$' }
+        measureLabel: { type: string, maxLength: 255 }
+        category: { $ref: '#/components/schemas/MeasureCategory' }
+        unit: { type: string, maxLength: 16 }
+        lowerBound: { type: number, format: double }
+        upperBound: { type: number, format: double }
+        measuredValue: { type: number, format: double, nullable: true }
+        antenna: { type: string, nullable: true, maxLength: 16 }
+        frequencyMhz: { type: integer, nullable: true, minimum: 0 }
+        modulationScheme: { type: string, nullable: true, maxLength: 32 }
+
+    UpdateMeasureRequest:
+      type: object
+      properties:
+        measuredValue: { type: number, format: double, nullable: true }
+        lowerBound: { type: number, format: double }
+        upperBound: { type: number, format: double }
+        unit: { type: string, maxLength: 16 }
+        antenna: { type: string, nullable: true, maxLength: 16 }
+        frequencyMhz: { type: integer, nullable: true, minimum: 0 }
+        modulationScheme: { type: string, nullable: true, maxLength: 32 }
+
+    BatchCreateMeasureRequest:
+      type: object
+      required: [measures]
+      properties:
+        measures:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: { $ref: '#/components/schemas/CreateMeasureRequest' }
+
+    ValidationMeasureResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        validationId: { type: integer, format: int64 }
+        catalogTemplateId: { type: integer, format: int64, nullable: true }
+        measureCode: { type: string }
+        measureLabel: { type: string }
+        category: { $ref: '#/components/schemas/MeasureCategory' }
+        unit: { type: string }
+        lowerBound: { type: number, format: double }
+        upperBound: { type: number, format: double }
+        measuredValue: { type: number, format: double, nullable: true }
+        status: { $ref: '#/components/schemas/MeasureStatus' }
+        deviationPct: { type: number, format: double, nullable: true }
+        antenna: { type: string, nullable: true }
+        frequencyMhz: { type: integer, nullable: true }
+        modulationScheme: { type: string, nullable: true }
+        sourceLogFile: { type: string, nullable: true }
+        enteredById: { type: integer, format: int64, nullable: true }
+        enteredByUsername: { type: string, nullable: true }
+        measuredAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    BatchMeasureErrorResponse:
+      type: object
+      properties:
+        type: { type: string, example: BATCH_REJECTED }
+        totalEntries: { type: integer }
+        failedEntries:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer }
+              code:
+                type: string
+                enum: [VALIDATION_FAILED, UNKNOWN_TEMPLATE, DUPLICATE_MEASURE_CODE, TICKET_NOT_EDITABLE, OWNER_MISMATCH]
+              message: { type: string }
+
+    ApiError:
+      type: object
+      properties:
+        timestamp: { type: string, format: date-time }
+        status: { type: integer }
+        error: { type: string }
+        message: { type: string }
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Forbidden:
+      description: Authenticated but role-gated out
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Conflict:
+      description: Duplicate natural key on the ticket (same `(measureCode, antenna, frequencyMhz, modulationScheme)`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    UnprocessableEntity:
+      description: Semantically invalid (e.g., ticket not in EN_COURS, batch all-or-nothing rejection)
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/ApiError'
+              - $ref: '#/components/schemas/BatchMeasureErrorResponse'
