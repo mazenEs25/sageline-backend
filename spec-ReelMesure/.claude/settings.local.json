@@ -98,7 +98,28 @@
       "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; Set-Location \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; cmd /c \".\\\\mvnw.cmd test -DskipTests=false 2>&1\" | Select-String \"\\\\[ERROR\\\\]\" | Select-Object -First 20)",
       "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; Set-Location \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; cmd /c \".\\\\mvnw.cmd test -DskipTests=false -Dtest=SageLineApplicationTests 2>&1\" | Select-String \"ck_vm_bounds|PASSED|ERROR|FAILURE\" | Select-Object -First 10)",
       "PowerShell(Get-Content *)",
-      "Bash(./mvnw -q -DskipTests compile)"
+      "Bash(./mvnw -q -DskipTests compile)",
+      "PowerShell($env:GIT_BRANCH_NAME = \"003-workflow-guard\"; .specify/extensions/git/scripts/powershell/create-new-feature.ps1 -Json -ShortName \"workflow-guard\" \"Phase 003 Workflow Guard\")",
+      "PowerShell(.specify/scripts/powershell/check-prerequisites.ps1 -Json -PathsOnly)",
+      "PowerShell(.specify/scripts/powershell/setup-plan.ps1 -Json)",
+      "PowerShell(.specify/scripts/powershell/setup-tasks.ps1 -Json)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files/Java//**)",
+      "Read(//c/Program Files/Microsoft//**)",
+      "Bash(export JAVA_HOME=\"/c/Program Files/Eclipse Adoptium/jdk-17\")",
+      "PowerShell(java *)",
+      "PowerShell($env:JAVA_HOME)",
+      "PowerShell($jdkDirs = Get-ChildItem \"C:\\\\Program Files\\\\\" -Recurse -Depth 2 -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match \"jdk\" } | Select-Object FullName -First 10; $jdkDirs)",
+      "PowerShell(Split-Path *)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Common Files\\\\Oracle\\\\Java\\\\javapath\\\\java.exe\" -version 2>&1)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Common Files\\\\Oracle\\\\Java\\\\javapath\"; Set-Location \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; .\\\\mvnw.cmd clean compile -q 2>&1 | Select-Object -Last 20)",
+      "PowerShell(Get-ChildItem \"C:\\\\Program Files\\\\Java\\\\\" -ErrorAction SilentlyContinue | Select-Object Name; Get-ChildItem \"C:\\\\Program Files\\\\Microsoft\\\\\" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match \"java|jdk\" } | Select-Object Name)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-17\" \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/mvnw\" -f \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/pom.xml\" clean compile -q)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-17\" \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/mvnw\" -f \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/pom.xml\" compile test-compile -q)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-17\" \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline\\\\sageLine-backend/mvnw\" -f \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/pom.xml\" compile test-compile -q)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-17\" \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/mvnw\" -f \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/pom.xml\" test -pl . -DskipTests=false -Dtest=\"MandatoryMeasureCoverageRuleTest,TicketTransitionGuardTest,MeasureDeviationCalculatorTest,SubmitReviewGuardArchitectureTest\" -q)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-17\" \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/mvnw\" -f \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/pom.xml\" test -DskipTests=false \"-Dtest=MandatoryMeasureCoverageRuleTest,TicketTransitionGuardTest,SubmitReviewGuardArchitectureTest\")",
+      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-17\" \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/mvnw\" -f \"/c/Users/mouaf/OneDrive/Bureau/stagePFE/PROJECT/Sageline/sageLine-backend/pom.xml\" compile test-compile)"
     ]
   }
 }

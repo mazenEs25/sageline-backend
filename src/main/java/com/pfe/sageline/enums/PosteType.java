@@ -10,7 +10,6 @@ public enum PosteType {
     BANC_SENSI,
     BANC_TT,
     BANC_TX,
-
     // BBS Intégration
     AQ_LIGNE,
     TELECHARGEMENT,
@@ -20,11 +19,9 @@ public enum PosteType {
     TEST_VISION,
     TEST_DOCSIS,
     TEST_SYNCHRO_GPON,
-
     // AVS CMS
     BANC_AUDIO_VIDEO,
     BANC_WIFI_CONDUIT,
-
     // AVS Intégration
     BPO,
     FSOS,

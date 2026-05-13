@@ -9,6 +9,7 @@ import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.exception.ValidationException;
 import com.pfe.sageline.mappers.ValidationMapper;
 import com.pfe.sageline.repository.*;
+import com.pfe.sageline.service.workflow.TicketTransitionGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -35,6 +36,7 @@ public class ValidationService {
     private final ValidationResultRepository validationResultRepository;
     private final UserRepository userRepository;
     private final ValidationAssignmentRepository assignmentRepository;
+    private final TicketTransitionGuard transitionGuard;
     private final ValidationMapper validationMapper;
     private final TicketCodeGenerator ticketCodeGenerator;
     private final AIPredictionService aiPredictionService;
@@ -437,7 +439,7 @@ public class ValidationService {
             validation = findValidationOrThrow(id);
         }
 
-        assertStatus(validation, TicketStatus.EN_COURS, "soumettre pour revue");
+        transitionGuard.check(validation.getId(), TicketStatus.EN_REVUE);
 
         validation.setStatus(TicketStatus.EN_REVUE);
         validation = validationRepository.save(validation);
@@ -629,6 +631,13 @@ public class ValidationService {
                 validationId, List.of(TicketStatus.CONFORME, TicketStatus.NON_CONFORME));
         if (total > 0 && done == total
                 && validation.getStatus() == TicketStatus.EN_COURS) {
+            try {
+                transitionGuard.check(validation.getId(), TicketStatus.EN_REVUE);
+            } catch (com.pfe.sageline.exception.TransitionBlockedException ex) {
+                log.warn("Auto-advance to EN_REVUE skipped for ticket {} — {}",
+                        validation.getTicketCode(), ex.getMessage());
+                return validationMapper.toResponseDTO(findValidationOrThrow(validationId));
+            }
             validation.setStatus(TicketStatus.EN_REVUE);
             validationRepository.save(validation);
             // Re-fetch with LEFT JOIN FETCH so assignments are loaded before
