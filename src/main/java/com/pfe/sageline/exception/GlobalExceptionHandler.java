@@ -170,6 +170,14 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponse, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
+    @org.springframework.web.bind.annotation.ExceptionHandler(com.pfe.sageline.exception.TransitionBlockedException.class)
+    public org.springframework.http.ResponseEntity<com.pfe.sageline.dtos.response.WorkflowReadinessDTO>
+            handleTransitionBlocked(com.pfe.sageline.exception.TransitionBlockedException ex) {
+        return org.springframework.http.ResponseEntity
+                .status(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ex.getReadiness());
+    }
+
     @ExceptionHandler(MeasureNotEditableException.class)
     public ResponseEntity<Map<String, Object>> handleMeasureNotEditable(MeasureNotEditableException ex) {
         log.error("Measure not editable: {}", ex.getMessage());

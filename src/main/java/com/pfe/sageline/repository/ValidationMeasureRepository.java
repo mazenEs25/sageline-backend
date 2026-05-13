@@ -38,4 +38,40 @@ public interface ValidationMeasureRepository extends JpaRepository<ValidationMea
             """)
     List<Long> findCatalogTemplateIdsPresentOnTicket(@Param("validationId") Long validationId,
                                                      @Param("templateIds") Collection<Long> templateIds);
+
+    @org.springframework.data.jpa.repository.Query("""
+           SELECT new com.pfe.sageline.dtos.internal.MandatoryCoverageRow(
+                  vm.mandatoryAtCreation,
+                  vm.status,
+                  COUNT(vm))
+           FROM   ValidationMeasure vm
+           WHERE  vm.validation.id = :validationId
+           GROUP  BY vm.mandatoryAtCreation, vm.status
+           """)
+    java.util.List<com.pfe.sageline.dtos.internal.MandatoryCoverageRow> coverageSummary(
+            @org.springframework.data.repository.query.Param("validationId") Long validationId);
+
+    @org.springframework.data.jpa.repository.Query("""
+           SELECT new com.pfe.sageline.dtos.response.MissingMeasureDTO(
+                  vm.measureCode, vm.measureLabel, true)
+           FROM   ValidationMeasure vm
+           WHERE  vm.validation.id      = :validationId
+             AND  vm.mandatoryAtCreation = true
+             AND  vm.status              = com.pfe.sageline.enums.MeasureStatus.NOT_EXECUTED
+           ORDER  BY vm.measureCode
+           """)
+    java.util.List<com.pfe.sageline.dtos.response.MissingMeasureDTO> missingMandatoryMeasures(
+            @org.springframework.data.repository.query.Param("validationId") Long validationId);
+
+    @org.springframework.data.jpa.repository.Query("""
+           SELECT new com.pfe.sageline.dtos.response.OutOfRangeMeasureDTO(
+                  vm.measureCode, vm.measureLabel, vm.measuredValue,
+                  vm.lowerBound, vm.upperBound, vm.deviationPct)
+           FROM   ValidationMeasure vm
+           WHERE  vm.validation.id = :validationId
+             AND  vm.status        = com.pfe.sageline.enums.MeasureStatus.OUT_OF_RANGE
+           ORDER  BY vm.measureCode
+           """)
+    java.util.List<com.pfe.sageline.dtos.response.OutOfRangeMeasureDTO> outOfRangeMeasures(
+            @org.springframework.data.repository.query.Param("validationId") Long validationId);
 }

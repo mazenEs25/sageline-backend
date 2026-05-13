@@ -86,4 +86,7 @@ public class ValidationMeasure {
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @Column(name = "mandatory_at_creation", nullable = false)
+    private boolean mandatoryAtCreation;
 }

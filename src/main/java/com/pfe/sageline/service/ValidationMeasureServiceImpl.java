@@ -5,6 +5,7 @@ import com.pfe.sageline.dtos.request.BatchCreateMeasureRequest;
 import com.pfe.sageline.dtos.request.CreateMeasureRequest;
 import com.pfe.sageline.dtos.request.UpdateMeasureRequest;
 import com.pfe.sageline.dtos.response.ValidationMeasureResponse;
+import com.pfe.sageline.dtos.response.WorkflowReadinessDTO;
 import com.pfe.sageline.entity.PosteMeasureCatalog;
 import com.pfe.sageline.entity.Validation;
 import com.pfe.sageline.entity.ValidationMeasure;
@@ -17,8 +18,10 @@ import com.pfe.sageline.mappers.ValidationMeasureMapper;
 import com.pfe.sageline.repository.PosteMeasureCatalogRepository;
 import com.pfe.sageline.repository.ValidationMeasureRepository;
 import com.pfe.sageline.repository.ValidationRepository;
+import com.pfe.sageline.service.workflow.WorkflowReadinessService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +44,8 @@ public class ValidationMeasureServiceImpl implements ValidationMeasureService {
     private final MeasureEditabilityGuard editabilityGuard;
     private final ValidationMeasureMapper mapper;
     private final SecurityUtils securityUtils;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final WorkflowReadinessService readinessService;
 
     @Override
     @Transactional(readOnly = true)
@@ -90,6 +95,7 @@ public class ValidationMeasureServiceImpl implements ValidationMeasureService {
         MeasureStatus status = deviationCalculator.computeStatus(req.getMeasuredValue(), lowerBound, upperBound);
         Double deviationPct = deviationCalculator.computeDeviationPct(req.getMeasuredValue(), lowerBound, upperBound);
 
+        PosteMeasureCatalog finalTemplate = template;
         ValidationMeasure entity = ValidationMeasure.builder()
                 .validation(ticket)
                 .catalogTemplate(template)
@@ -107,9 +113,11 @@ public class ValidationMeasureServiceImpl implements ValidationMeasureService {
                 .modulationScheme(modulationScheme)
                 .enteredBy(securityUtils.getCurrentUserId())
                 .measuredAt(Instant.now())
+                .mandatoryAtCreation(finalTemplate != null && Boolean.TRUE.equals(finalTemplate.getMandatory()))
                 .build();
 
         ValidationMeasure saved = measureRepository.save(entity);
+        publishReadinessAfterCommit(validationId);
         return mapper.toResponse(saved);
     }
 
@@ -160,6 +168,7 @@ public class ValidationMeasureServiceImpl implements ValidationMeasureService {
                     .modulationScheme(t.getModulationScheme())
                     .enteredBy(operatorId)
                     .measuredAt(now)
+                    .mandatoryAtCreation(Boolean.TRUE.equals(t.getMandatory()))
                     .build());
         }
 
@@ -189,7 +198,9 @@ public class ValidationMeasureServiceImpl implements ValidationMeasureService {
         m.setEnteredBy(securityUtils.getCurrentUserId());
         m.setMeasuredAt(Instant.now());
 
-        return mapper.toResponse(measureRepository.save(m));
+        ValidationMeasureResponse updated = mapper.toResponse(measureRepository.save(m));
+        publishReadinessAfterCommit(validationId);
+        return updated;
     }
 
     @Override
@@ -200,6 +211,7 @@ public class ValidationMeasureServiceImpl implements ValidationMeasureService {
         ValidationMeasure m = measureRepository.findByIdAndValidationId(measureId, validationId)
                 .orElseThrow(() -> new ResourceNotFoundException("ValidationMeasure", "id", measureId));
         measureRepository.delete(m);
+        publishReadinessAfterCommit(validationId);
     }
 
     @Override
@@ -307,10 +319,28 @@ public class ValidationMeasureServiceImpl implements ValidationMeasureService {
                     .modulationScheme(r.modulationScheme)
                     .enteredBy(operatorId)
                     .measuredAt(now)
+                    .mandatoryAtCreation(r.template != null && Boolean.TRUE.equals(r.template.getMandatory()))
                     .build();
         }).toList();
 
-        return mapper.toResponseList(measureRepository.saveAll(entities));
+        List<ValidationMeasureResponse> results = mapper.toResponseList(measureRepository.saveAll(entities));
+        publishReadinessAfterCommit(validationId);
+        return results;
+    }
+
+    private void publishReadinessAfterCommit(Long validationId) {
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+            new org.springframework.transaction.support.TransactionSynchronization() {
+                @Override public void afterCommit() {
+                    try {
+                        WorkflowReadinessDTO snapshot = readinessService.computeReadiness(validationId, null);
+                        messagingTemplate.convertAndSend(
+                            "/topic/validation." + validationId + ".readiness", snapshot);
+                    } catch (Exception e) {
+                        log.warn("Readiness STOMP push failed for ticket {}: {}", validationId, e.getMessage());
+                    }
+                }
+            });
     }
 
     private Validation loadTicket(Long validationId) {

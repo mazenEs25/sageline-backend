@@ -1,0 +1,157 @@
+openapi: 3.0.3
+info:
+  title: SageLine — Workflow Guard API (Phase 003)
+  version: "0.3.0"
+  description: |
+    Workflow-coverage guard for the `EN_COURS → EN_REVUE` ticket transition.
+
+    Two REST endpoints + one STOMP topic. The single guard service computes a
+    `WorkflowReadinessDTO`; the **same DTO** is returned by the read-only probe,
+    by the 422 refusal envelope on a blocked submit-for-review, and pushed over
+    STOMP after every successful measure mutation.
+servers:
+  - url: http://localhost:8089
+paths:
+
+  /api/validations/{id}/readiness:
+    get:
+      summary: Read the workflow-readiness snapshot for a ticket.
+      description: |
+        Non-mutating. Returns the same payload shape used in 422 refusal
+        responses. Authorization mirrors `GET /api/validations/{id}` 1:1
+        (Q4 — same production-line scoping as the ticket-detail endpoint).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: targetStatus
+          required: false
+          description: |
+            Target status to evaluate. Defaults to `EN_REVUE` for `EN_COURS`
+            tickets. For tickets in other statuses, the default still returns
+            HTTP 200 with `canTransition=false` and a blocking reason naming
+            the source-status mismatch (R-007).
+          schema:
+            type: string
+            enum: [EN_REVUE]
+      responses:
+        "200":
+          description: Readiness snapshot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkflowReadinessDTO" }
+        "401": { description: Missing or invalid JWT. }
+        "403": { description: Authenticated user cannot read this ticket (production-line scope). }
+        "404": { description: Ticket not found. }
+
+  /api/validations/{id}/submit-review:
+    patch:
+      summary: Move a ticket from EN_COURS to EN_REVUE (now guarded).
+      description: |
+        Existing endpoint from the validation lifecycle. Phase 003 wires the
+        single `TicketTransitionGuard` in front of the status mutation.
+        On block, returns HTTP 422 with the readiness payload as the body.
+        Pre-existing role/prep/handover checks remain in place behind the
+        guard via thin adapter calls (Q5 delegate-and-wrap).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Ticket moved to EN_REVUE.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationResponseDTO" }
+        "401": { description: Missing or invalid JWT. }
+        "403": { description: Caller lacks role TECH_VAL/ADMIN_IT for this ticket. }
+        "404": { description: Ticket not found. }
+        "422":
+          description: |
+            Transition blocked by the guard. Body is the same
+            `WorkflowReadinessDTO` shape returned by the probe; `canTransition`
+            is always `false` and `blockingReasons` lists every failed rule.
+            Per Constitution IV (NON-NEGOTIABLE).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkflowReadinessDTO" }
+
+components:
+  schemas:
+
+    WorkflowReadinessDTO:
+      type: object
+      required:
+        - ticketId
+        - currentStatus
+        - targetStatus
+        - mandatoryTotal
+        - mandatoryFilled
+        - mandatoryMissing
+        - missingMeasures
+        - outOfRangeMeasures
+        - canTransition
+        - blockingReasons
+      properties:
+        ticketId:        { type: integer, format: int64, example: 42 }
+        currentStatus:   { type: string, example: "EN_COURS" }
+        targetStatus:    { type: string, example: "EN_REVUE" }
+        mandatoryTotal:  { type: integer, example: 16 }
+        mandatoryFilled: { type: integer, example: 14 }
+        mandatoryMissing:{ type: integer, example: 2 }
+        missingMeasures:
+          type: array
+          items: { $ref: "#/components/schemas/MissingMeasureDTO" }
+        outOfRangeMeasures:
+          type: array
+          items: { $ref: "#/components/schemas/OutOfRangeMeasureDTO" }
+        canTransition: { type: boolean, example: false }
+        blockingReasons:
+          type: array
+          items: { type: string }
+          example:
+            - "2 mandatory measures still in NOT_EXECUTED state"
+
+    MissingMeasureDTO:
+      type: object
+      required: [measureCode, label, required]
+      properties:
+        measureCode: { type: string, example: "POWER_RMS_AVG_VSA1_ANT3_5670" }
+        label:       { type: string, example: "Power RMS avg, antenna 3, 5670 MHz" }
+        required:    { type: boolean, example: true }
+
+    OutOfRangeMeasureDTO:
+      type: object
+      required: [measureCode, label, measuredValue, lowerBound, upperBound, deviationPct]
+      properties:
+        measureCode:   { type: string, example: "POWER_PEAK_AVG_VSA1" }
+        label:         { type: string, example: "Power peak avg, VSA1" }
+        measuredValue: { type: number, format: double, example: 20.0 }
+        lowerBound:    { type: number, format: double, example: 13.5 }
+        upperBound:    { type: number, format: double, example: 16.5 }
+        deviationPct:  { type: number, format: double, example: 333.0 }
+
+    ValidationResponseDTO:
+      description: |
+        Existing DTO from Phase 002 / the legacy validation module. Schema
+        re-used as-is; not re-declared here.
+      type: object
+
+# ---------------------------------------------------------------------------
+# STOMP topic (R-002, R-008) — documented inline because OpenAPI 3.0 cannot
+# express STOMP/WebSocket topics natively, and AsyncAPI is not adopted in
+# this codebase.
+#
+# Topic:        /topic/validation.{id}.readiness
+# Message body: WorkflowReadinessDTO (schema above)
+# Trigger:      after every successful create/update/delete of a measure
+#               on ticket {id}, fired post-commit (R-006).
+# Subscription: gated by the same access check as
+#               GET /api/validations/{id}/readiness (Q4).
+# Cross-ticket isolation: subscribers on /topic/validation.A.readiness
+#               receive zero messages for ticket B (FR-011, asserted by
+#               ReadinessSnapshotStompContractTest).
+# ---------------------------------------------------------------------------
