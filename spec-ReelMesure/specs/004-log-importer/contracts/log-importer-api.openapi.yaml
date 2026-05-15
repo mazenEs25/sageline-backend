@@ -1,0 +1,307 @@
+openapi: 3.0.3
+info:
+  title: SageLine — Sagemcom Log Importer API
+  version: "0.1.0"
+  description: |
+    Phase 004 endpoints for parsing Sagemcom production log files and populating a
+    validation ticket's measures. Preview is non-mutating; import commits. Both consume
+    the same pipeline so their report payloads are byte-equivalent.
+servers:
+  - url: http://localhost:8089
+    description: Local development
+paths:
+  /api/validations/{id}/preview-log:
+    post:
+      operationId: previewLog
+      summary: Dry-run parse of an uploaded log against a ticket
+      description: |
+        Parses the uploaded log and returns a full LogImportReport without persisting any
+        measure or ImportedLogFile row. Used by the frontend to preview the result before
+        the operator confirms.
+      tags: [LogImporter]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The Sagemcom log file (.log or .txt). Max 2 MB.
+                options:
+                  $ref: '#/components/schemas/LogImportOptions'
+      responses:
+        "200":
+          description: Preview report rendered successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogImportReport'
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409":
+          description: Another import is already in progress for this ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: IMPORT_IN_PROGRESS
+                message: An import is already running for ticket 42. Retry shortly.
+        "413":
+          description: Upload exceeds the 2 MB size limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: LOG_TOO_LARGE
+                message: Log file exceeds the 2 MB maximum size.
+        "422":
+          description: Log format unsupported, corrupted, or missing the final-measure block.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/validations/{id}/import-log:
+    post:
+      operationId: importLog
+      summary: Parse + commit a log upload to a ticket
+      description: |
+        Persists matched measures and an ImportedLogFile row. Pre-existing OK / OUT_OF_RANGE
+        rows are only replaced when options.overwriteExisting is true. Triggers a
+        WorkflowReadinessService snapshot publish after AFTER_COMMIT.
+      tags: [LogImporter]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The Sagemcom log file (.log or .txt). Max 2 MB.
+                options:
+                  $ref: '#/components/schemas/LogImportOptions'
+      responses:
+        "200":
+          description: Import committed. The report describes what was persisted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogImportReport'
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409":
+          description: |
+            Concurrent import (IMPORT_IN_PROGRESS) or ticket not in EN_COURS
+            (MEASURE_NOT_EDITABLE — surfaced by the Phase 002 editability guard).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        "413":
+          description: Upload exceeds the 2 MB size limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        "422":
+          description: Log format unsupported, corrupted, or missing the final-measure block.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/validations/{id}/measures/{measureId}/source-snippet:
+    get:
+      operationId: getSourceSnippet
+      summary: Return the originating log snippet for an imported measure
+      description: |
+        Returns the lines around the measure's entry in its source log. If the log file is
+        missing on disk, returns 200 with available=false (FR-009 graceful fallback). 404
+        only when the measure id does not exist or does not belong to the ticket id.
+      tags: [LogImporter]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+        - in: path
+          name: measureId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Snippet (or available=false fallback) returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceSnippet'
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ValidationId:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, format: int64 }
+  responses:
+    Forbidden:
+      description: Caller is not in the allowed role set (TECH_VAL, TECH_PREP, ADMIN_IT).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    NotFound:
+      description: Ticket or measure not found, or not accessible to the caller's production line.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+  schemas:
+    LogFormat:
+      type: string
+      enum: [BNFT, BWC, BTF]
+    MeasureStatus:
+      type: string
+      enum: [OK, OUT_OF_RANGE, NOT_EXECUTED]
+      description: Authoritative status from MeasureDeviationCalculator (Phase 002).
+    SourceDeclaredStatus:
+      type: string
+      enum: [OK_FROM_LOG, OUT_OF_RANGE_FROM_LOG, NOT_EXECUTED_FROM_LOG]
+      description: Non-authoritative Sagemcom Status 0/1/2 as it appeared in the log.
+    UnmatchedReason:
+      type: string
+      enum: [NO_TEMPLATE_FOR_POSTE_TYPE, AMBIGUOUS_ALIAS, MISSING_BOUNDS_IN_LOG]
+    WarningCode:
+      type: string
+      enum: [WRONG_STATION_FORMAT, STATUS_DIVERGENCE, MISSING_UNIT_FALLBACK, TRUNCATED_FINAL_BLOCK]
+
+    LogImportOptions:
+      type: object
+      properties:
+        overwriteExisting:
+          type: boolean
+          default: false
+          description: |
+            When true, rows currently in OK / OUT_OF_RANGE listed under wouldOverwrite[]
+            are replaced by the import. Default false keeps already-measured values intact;
+            preview always discloses what would be overwritten regardless of this flag.
+
+    MatchedMeasure:
+      type: object
+      required: [measureCode, sourceCode, unit, lowerBound, upperBound, computedStatus, sourceDeclaredStatus, templateId, willPersist]
+      properties:
+        measureCode: { type: string }
+        sourceCode: { type: string }
+        measuredValue: { type: number, format: double, nullable: true }
+        unit: { type: string }
+        lowerBound: { type: number, format: double }
+        upperBound: { type: number, format: double }
+        computedStatus: { $ref: '#/components/schemas/MeasureStatus' }
+        sourceDeclaredStatus: { $ref: '#/components/schemas/SourceDeclaredStatus' }
+        templateId: { type: integer, format: int64 }
+        willPersist:
+          type: boolean
+          description: |
+            False when this row requires overwriteExisting=true and the flag is false on the request.
+            In preview, this exposes the "would be skipped" status to the UI.
+
+    UnmatchedMeasure:
+      type: object
+      required: [measureCode, reason, reasonDetail]
+      properties:
+        measureCode: { type: string }
+        measuredValue: { type: number, format: double, nullable: true }
+        unit: { type: string, nullable: true }
+        reason: { $ref: '#/components/schemas/UnmatchedReason' }
+        reasonDetail: { type: string }
+
+    WouldOverwriteMeasure:
+      type: object
+      required: [measureCode, currentStatus, currentEnteredManually, newComputedStatus]
+      properties:
+        measureCode: { type: string }
+        currentValue: { type: number, format: double, nullable: true }
+        currentStatus: { $ref: '#/components/schemas/MeasureStatus' }
+        currentEnteredManually:
+          type: boolean
+          description: Informational only — not used as a permission gate.
+        newValue: { type: number, format: double, nullable: true }
+        newComputedStatus: { $ref: '#/components/schemas/MeasureStatus' }
+
+    Warning:
+      type: object
+      required: [code, message]
+      properties:
+        code: { $ref: '#/components/schemas/WarningCode' }
+        measureCode: { type: string, nullable: true }
+        message: { type: string }
+
+    LogImportReport:
+      type: object
+      required: [detectedFormat, totalParsed, matched, unmatched, wouldOverwrite, warnings, ticketId, dryRun]
+      properties:
+        detectedFormat: { $ref: '#/components/schemas/LogFormat' }
+        totalParsed: { type: integer }
+        matched:
+          type: array
+          items: { $ref: '#/components/schemas/MatchedMeasure' }
+        unmatched:
+          type: array
+          items: { $ref: '#/components/schemas/UnmatchedMeasure' }
+        wouldOverwrite:
+          type: array
+          items: { $ref: '#/components/schemas/WouldOverwriteMeasure' }
+        warnings:
+          type: array
+          items: { $ref: '#/components/schemas/Warning' }
+        ticketId: { type: integer, format: int64 }
+        dryRun:
+          type: boolean
+          description: true for preview-log responses, false for import-log responses.
+
+    SourceSnippet:
+      type: object
+      required: [measureId, originalFilename, detectedFormat, available]
+      properties:
+        measureId: { type: integer, format: int64 }
+        originalFilename: { type: string }
+        detectedFormat: { $ref: '#/components/schemas/LogFormat' }
+        snippet:
+          type: string
+          nullable: true
+          description: null iff available == false (file missing on disk — FR-009 fallback).
+        available: { type: boolean }
+        startLine: { type: integer, nullable: true }
+        endLine: { type: integer, nullable: true }
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true

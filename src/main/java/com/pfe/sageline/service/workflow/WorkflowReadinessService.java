@@ -11,6 +11,8 @@ import com.pfe.sageline.exception.ResourceNotFoundException;
 import com.pfe.sageline.repository.ValidationMeasureRepository;
 import com.pfe.sageline.repository.ValidationRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class WorkflowReadinessService {
 
@@ -25,6 +28,22 @@ public class WorkflowReadinessService {
     private final ValidationMeasureRepository measureRepository;
     private final SourceStatusRule sourceStatusRule;
     private final MandatoryMeasureCoverageRule coverageRule;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    /**
+     * Computes the current readiness snapshot and pushes it to
+     * /topic/validation.{id}.readiness. Caller decides timing (e.g., post-commit).
+     * STOMP failures are logged and swallowed — readiness data is best-effort.
+     */
+    public void publishSnapshot(Long validationId) {
+        try {
+            WorkflowReadinessDTO snapshot = computeReadiness(validationId, null);
+            messagingTemplate.convertAndSend(
+                "/topic/validation." + validationId + ".readiness", snapshot);
+        } catch (Exception e) {
+            log.warn("Readiness STOMP push failed for ticket {}: {}", validationId, e.getMessage());
+        }
+    }
 
     @Transactional(readOnly = true)
     public WorkflowReadinessDTO computeReadiness(Long validationId, TicketStatus targetStatus) {

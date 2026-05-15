@@ -32,7 +32,32 @@ public class CatalogSchemaInitializer {
         applyPartialUniqueIndex();
         applyCheckConstraint();
         applyValidationMeasuresConstraints();
+        applyMeasureCodeAliasConstraint();
         loadSeed();
+        loadPhase004FixtureSeed();
+    }
+
+    private void applyMeasureCodeAliasConstraint() {
+        if (!tableExists("measure_code_alias")) return;
+        Integer exists = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM pg_constraint WHERE conname = 'uk_measure_code_alias_poste_source'",
+            Integer.class
+        );
+        if (exists != null && exists == 0) {
+            jdbc.execute(
+                "ALTER TABLE measure_code_alias " +
+                "ADD CONSTRAINT uk_measure_code_alias_poste_source UNIQUE (poste_type, source_code)"
+            );
+        }
+    }
+
+    private void loadPhase004FixtureSeed() throws Exception {
+        if (!tableExists("measure_code_alias")) return;
+        if (!tableExists("poste_measure_catalog")) return;
+        try (var stream = new ClassPathResource("db/migration/V4.2__alias_and_catalog_for_fixtures.sql").getInputStream()) {
+            String sql = StreamUtils.copyToString(stream, StandardCharsets.UTF_8);
+            jdbc.execute(sql);
+        }
     }
 
     private boolean tableExists(String tableName) {
