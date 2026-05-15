@@ -104,6 +104,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
                         .requestMatchers(HttpMethod.DELETE, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
 
+                        // ─── PHASE 004 LOG IMPORTER ───
+                        // Preview and import endpoints — must come BEFORE the generic
+                        // /api/validations/** POST rule, otherwise that rule's
+                        // hasAnyRole(...TECH_VALIDATION...) check overrides @PreAuthorize.
+                        .requestMatchers(HttpMethod.POST, "/api/validations/*/preview-log")
+                            .hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
+                        .requestMatchers(HttpMethod.POST, "/api/validations/*/import-log")
+                            .hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
+
                         // ─── VALIDATION ENDPOINTS ───
                         // Create/close validations: TECH_VALIDATION, CHEF_SECTEUR, ADMIN_IT
                         .requestMatchers(HttpMethod.POST, "/api/validations/**")

@@ -2,6 +2,7 @@ package com.pfe.sageline.entity;
 
 import com.pfe.sageline.enums.MeasureCategory;
 import com.pfe.sageline.enums.MeasureStatus;
+import com.pfe.sageline.enums.SourceDeclaredStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
@@ -72,6 +73,14 @@ public class ValidationMeasure {
 
     @Column(name = "source_log_file", length = 255)
     private String sourceLogFile;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "imported_log_file_id")
+    private ImportedLogFile importedLogFile;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_declared_status", length = 32)
+    private SourceDeclaredStatus sourceDeclaredStatus;
 
     @Column(name = "entered_by")
     private Long enteredBy;

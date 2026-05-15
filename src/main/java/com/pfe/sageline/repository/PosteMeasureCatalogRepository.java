@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface PosteMeasureCatalogRepository extends JpaRepository<PosteMeasureCatalog, Long> {
@@ -23,6 +24,11 @@ public interface PosteMeasureCatalogRepository extends JpaRepository<PosteMeasur
     List<PosteMeasureCatalog> findByActive(boolean active);
 
     boolean existsByPosteTypeAndMeasureCodeAndActiveTrue(
+            PosteType posteType,
+            String measureCode
+    );
+
+    Optional<PosteMeasureCatalog> findByPosteTypeAndMeasureCodeAndActiveTrue(
             PosteType posteType,
             String measureCode
     );

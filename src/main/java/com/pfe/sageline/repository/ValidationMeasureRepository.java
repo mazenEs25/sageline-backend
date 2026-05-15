@@ -74,4 +74,13 @@ public interface ValidationMeasureRepository extends JpaRepository<ValidationMea
            """)
     java.util.List<com.pfe.sageline.dtos.response.OutOfRangeMeasureDTO> outOfRangeMeasures(
             @org.springframework.data.repository.query.Param("validationId") Long validationId);
+
+    @Query("""
+            SELECT m FROM ValidationMeasure m
+            WHERE m.validation.id = :validationId
+              AND m.measureCode IN :measureCodes
+            """)
+    List<ValidationMeasure> findByValidationIdAndMeasureCodeIn(
+            @Param("validationId") Long validationId,
+            @Param("measureCodes") Collection<String> measureCodes);
 }

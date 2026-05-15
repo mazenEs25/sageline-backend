@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 @Slf4j
@@ -241,6 +242,59 @@ public class GlobalExceptionHandler {
         body.put("error", "Bad Request");
         body.put("message", ex.getMostSpecificCause().getMessage());
         return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler(UnsupportedLogFormatException.class)
+    public ResponseEntity<Map<String, Object>> handleUnsupportedLogFormat(UnsupportedLogFormatException ex) {
+        log.error("Unsupported log format: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", 422);
+        body.put("code", "UNSUPPORTED_LOG_FORMAT");
+        body.put("message", ex.getMessage());
+        body.put("details", Map.of("headerSample", ex.getHeaderSample()));
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
+    @ExceptionHandler(LogParseException.class)
+    public ResponseEntity<Map<String, Object>> handleLogParseException(LogParseException ex) {
+        log.error("Log parse error: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", 422);
+        body.put("code", "LOG_PARSE_ERROR");
+        body.put("message", ex.getMessage());
+        body.put("details", Map.of("parserNotes", ex.getParserNotes()));
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
+    @ExceptionHandler(LogTooLargeException.class)
+    public ResponseEntity<Map<String, Object>> handleLogTooLarge(LogTooLargeException ex) {
+        log.error("Log too large: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", 413);
+        body.put("code", "LOG_TOO_LARGE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(body);
+    }
+
+    @ExceptionHandler(ImportInProgressException.class)
+    public ResponseEntity<Map<String, Object>> handleImportInProgress(ImportInProgressException ex) {
+        log.error("Import in progress: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", 409);
+        body.put("code", "IMPORT_IN_PROGRESS");
+        body.put("message", ex.getMessage());
+        body.put("validationId", ex.getValidationId());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        log.error("Upload size exceeded: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", 413);
+        body.put("code", "LOG_TOO_LARGE");
+        body.put("message", "Upload exceeds 2MB limit");
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(body);
     }
 
     /**
