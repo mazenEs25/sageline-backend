@@ -62,9 +62,11 @@ public class PosteCatalogController {
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Get measures only for a poste type (without parent metadata)")
     public ResponseEntity<List<PosteMeasureCatalogResponse>> getMeasuresByPosteType(
-        @PathVariable PosteType posteType
+        @PathVariable PosteType posteType,
+        @Parameter(description = "Include soft-deleted (inactive) measures")
+        @RequestParam(defaultValue = "false") boolean includeInactive
     ) {
-        return ResponseEntity.ok(posteCatalogService.getMeasuresByPosteType(posteType));
+        return ResponseEntity.ok(posteCatalogService.getMeasuresByPosteType(posteType, includeInactive));
     }
 
     @GetMapping("/measures/{id}")

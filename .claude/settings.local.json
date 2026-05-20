@@ -12,7 +12,10 @@
       "PowerShell(cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; $env:JAVA_HOME = \"C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-17.0.14.7-hotspot\"; .\\\\mvnw compile 2>&1 | Select-String -Pattern \"ERROR|BUILD|error:|cannot find\" | Select-Object -Last 30)",
       "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; .\\\\mvnw compile 2>&1 | Select-String -Pattern \"ERROR|BUILD|cannot find symbol\" | Select-Object -Last 30)",
       "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; .\\\\mvnw test -DskipTests=false -pl . -Dtest=\"HandoverServiceImplAcceptTest,HandoverServiceImplAutoTriggerTest\" 2>&1 | Select-String -Pattern \"Tests run|FAIL|ERROR|BUILD\" | Select-Object -Last 20)",
-      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; .\\\\mvnw test -DskipTests=false -Dtest=\"HandoverServiceImplAcceptTest,HandoverServiceImplAutoTriggerTest\" 2>&1 | Select-String -Pattern \"Tests run|FAIL|ERROR|BUILD SUCCESS|BUILD FAILURE\" | Select-Object -Last 15)"
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-17\"; cd \"C:\\\\Users\\\\mouaf\\\\OneDrive\\\\Bureau\\\\stagePFE\\\\PROJECT\\\\Sageline\\\\sageLine-backend\"; .\\\\mvnw test -DskipTests=false -Dtest=\"HandoverServiceImplAcceptTest,HandoverServiceImplAutoTriggerTest\" 2>&1 | Select-String -Pattern \"Tests run|FAIL|ERROR|BUILD SUCCESS|BUILD FAILURE\" | Select-Object -Last 15)",
+      "Bash(./mvnw -q compile -DskipTests)",
+      "PowerShell(.\\\\mvnw.cmd -q compile -DskipTests 2>&1 | Select-Object -Last 40)",
+      "PowerShell(cmd /c \".\\\\mvnw.cmd compile -DskipTests -q 2>&1\" | Select-Object -Last 50)"
     ]
   }
 }

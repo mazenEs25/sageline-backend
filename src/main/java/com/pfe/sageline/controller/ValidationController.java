@@ -161,9 +161,6 @@ public class ValidationController {
         return ResponseEntity.ok(validationService.cancelTicket(id, reason != null ? reason : "Annulé"));
     }
 
-    // ========================
-    // DELETE
-    // ========================
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN_IT', 'CHEF_SECTEUR')")

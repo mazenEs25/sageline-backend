@@ -99,26 +99,26 @@ public class SecurityConfig {
 
                         // ─── VALIDATION MEASURE ENDPOINTS ───
                         // Measures CRUD: TECH_VAL, TECH_PREP, ADMIN_IT (must come before generic /api/validations/**)
-                        .requestMatchers(HttpMethod.POST, "/api/validations/*/measures").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
-                        .requestMatchers(HttpMethod.POST, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
-                        .requestMatchers(HttpMethod.PUT, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
-                        .requestMatchers(HttpMethod.DELETE, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
+                        .requestMatchers(HttpMethod.POST, "/api/validations/*/measures").hasAnyRole("ADMIN_IT", "TECH_VAL", "CHEF_SECTEUR")
+                        .requestMatchers(HttpMethod.POST, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "CHEF_SECTEUR")
+                        .requestMatchers(HttpMethod.PUT, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "CHEF_SECTEUR")
+                        .requestMatchers(HttpMethod.DELETE, "/api/validations/*/measures/**").hasAnyRole("ADMIN_IT", "TECH_VAL", "CHEF_SECTEUR")
 
                         // ─── PHASE 004 LOG IMPORTER ───
                         // Preview and import endpoints — must come BEFORE the generic
                         // /api/validations/** POST rule, otherwise that rule's
                         // hasAnyRole(...TECH_VALIDATION...) check overrides @PreAuthorize.
                         .requestMatchers(HttpMethod.POST, "/api/validations/*/preview-log")
-                            .hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
+                            .hasAnyRole("ADMIN_IT", "TECH_VAL", "CHEF_SECTEUR")
                         .requestMatchers(HttpMethod.POST, "/api/validations/*/import-log")
-                            .hasAnyRole("ADMIN_IT", "TECH_VAL", "TECH_PREP")
+                            .hasAnyRole("ADMIN_IT", "TECH_VAL", "CHEF_SECTEUR")
 
                         // ─── VALIDATION ENDPOINTS ───
                         // Create/close validations: TECH_VALIDATION, CHEF_SECTEUR, ADMIN_IT
                         .requestMatchers(HttpMethod.POST, "/api/validations/**")
-                        .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "TECH_VALIDATION")
+                        .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
                         .requestMatchers(HttpMethod.PATCH, "/api/validations/*/close")
-                        .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR", "TECH_VALIDATION")
+                        .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
                         .requestMatchers(HttpMethod.DELETE, "/api/validations/**")
                         .hasAnyRole("ADMIN_IT", "CHEF_SECTEUR")
 

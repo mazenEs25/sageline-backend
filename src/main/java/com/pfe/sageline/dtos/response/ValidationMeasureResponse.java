@@ -5,9 +5,17 @@ import com.pfe.sageline.enums.MeasureStatus;
 
 import java.time.Instant;
 
+/**
+ * Response shape for a {@code ValidationMeasure}.
+ *
+ * <p>{@code posteStatusId} was added in the V5.0 schema migration so frontend
+ * components can scope rows to a specific poste of the line (per-poste UI).
+ * Null is possible only for legacy ad-hoc rows that couldn't be backfilled.</p>
+ */
 public record ValidationMeasureResponse(
         Long id,
         Long validationId,
+        Long posteStatusId,
         Long catalogTemplateId,
         String measureCode,
         String measureLabel,

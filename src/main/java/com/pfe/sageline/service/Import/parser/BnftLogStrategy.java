@@ -12,17 +12,20 @@ import java.util.List;
 @Slf4j
 public class BnftLogStrategy implements LogFormatStrategy {
 
-    private static final String HEADER_MARKER = "[TEST_FONCTIONNEL]";
+    // Real Sagemcom BNFT logs are identified by the DEC_BNFT config-key prefix
+    // or the NFT_V version string that appear in the early header.
+    private static final String MARKER_CONF = "conf_DEC_BNFT";
+    private static final String MARKER_VERSION = "NFT_V";
 
     @Override
     public boolean supports(String headerSample) {
-        return headerSample.contains(HEADER_MARKER);
+        return headerSample.contains(MARKER_CONF) || headerSample.contains(MARKER_VERSION);
     }
 
     @Override
     public ParsedLog parse(String content) {
         List<String> parserNotes = new ArrayList<>();
-        List<ParsedMeasure> measures = BlockFormatParser.parseBlocks(content, parserNotes);
+        List<ParsedMeasure> measures = BnftBlockParser.parseBlocks(content, parserNotes);
         if (measures.isEmpty()) {
             throw new LogParseException("No valid measure blocks found in BNFT log file", parserNotes);
         }

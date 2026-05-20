@@ -17,6 +17,8 @@ public interface PosteCatalogService {
 
     List<PosteMeasureCatalogResponse> getMeasuresByPosteType(PosteType posteType);
 
+    List<PosteMeasureCatalogResponse> getMeasuresByPosteType(PosteType posteType, boolean includeInactive);
+
     List<PosteType> listPostesWithActive();
 
     // Get single

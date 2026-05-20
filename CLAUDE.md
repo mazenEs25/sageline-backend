@@ -1,4 +1,4 @@
-/# CLAUDE.md
+# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -41,7 +41,7 @@ SageLine is a Spring Boot 4.0.2 application for production line quality validati
 - **Entities** (`entity/`): JPA entities with Lombok (`@Data`, `@NoArgsConstructor`, `@AllArgsConstructor`, `@Builder`)
 - **DTOs** (`dtos/request/` and `dtos/response/`): Separated request and response DTOs
 - **Mappers** (`mappers/`): Manual entity ↔ DTO conversion
-- **Exception** (`exception/`): `GlobalExceptionHandler` (`@RestControllerAdvice`) — throws `ResourceNotFoundException` (404) and `ValidationException` (400)
+- **Exception** (`exception/`): `GlobalExceptionHandler` (`@RestControllerAdvice`) — throws `ResourceNotFoundException` (404), `ValidationException` (400), `TransitionBlockedException` (422), `BatchMeasureValidationException` (multi-row batch failures), `MeasureNotEditableException` (ticket not in EN_COURS)
 - **Config** (`Config/`): Security, Keycloak, WebSocket
 
 ## Security & Authentication
@@ -112,7 +112,28 @@ Handover endpoints (`/api/handovers`):
 - `HandoverService` / `HandoverServiceImpl` — full shift-end handover protocol (US1–US7)
 - `AnomalyDetectionService` / `ToolRecommendationService` — AI-output management
 - `NotificationService` — creates and pushes notifications over WebSocket
-- `ValidationMeasureService` — manages bounded-tolerance industrial measures per ticket; auto-classifies via MeasureDeviationCalculator; gated to EN_COURS by MeasureEditabilityGuard (Phase 002)
+- `ValidationMeasureService` — manages bounded-tolerance industrial measures per ticket; auto-classifies via `MeasureDeviationCalculator`; gated to EN_COURS by `MeasureEditabilityGuard` (Phase 002). After every mutation, publishes a coalesced `WorkflowReadinessDTO` snapshot to `/topic/validation.{id}.readiness` via STOMP (after commit) so the frontend readiness bar stays live without polling.
+- `WorkflowReadinessService` / `TicketTransitionGuard` (Phase 003) — rule-based pre-check before status transitions; aggregates `TransitionRule` implementations (`MandatoryMeasureCoverageRule`, `SourceStatusRule`) into a `WorkflowReadinessDTO`. `ValidationService` calls `transitionGuard.check(id, EN_REVUE)` before manual `submit-review` AND before auto-advance when all results are done — a blocked auto-advance is swallowed (logged + ticket stays in `EN_COURS`), a blocked manual call throws `TransitionBlockedException` (HTTP 422). Probe readiness via `GET /api/validations/{id}/readiness?targetStatus=EN_REVUE`. Also exposes `computePosteReadiness(validationId, zoneId)` used by `PosteValidationController`.
+- `LogImportService` / `LogImportPipeline` (Phase 004) — Sagemcom log ingestion for BNFT/BWC/BTF formats. `HeaderSniffer` picks a `LogFormatStrategy`; `BlockFormatParser` extracts measures; `MeasureMatcher` resolves codes via `PosteMeasureCatalog` + `MeasureCodeAlias`; `SourceStatusReconciler` updates each `ValidationMeasure.sourceDeclaredStatus`. Two-step UX: `POST /preview-log` (dry run, returns `LogImportReportDTO` with matched/unmatched/out-of-range/would-overwrite) then `POST /import-log` with `LogImportOptionsDTO(overwriteExisting)`. `ImportLockService` serializes concurrent imports per validation. Storage root, max size, snippet line count under `sageline.import.*` (see `LogImportProperties`). `MeasureSourceController` exposes `GET /api/validations/{validationId}/measures/{measureId}/source-snippet`.
+
+### Per-Poste Measure Scoping (Phase 005 — V5.0 migration)
+
+`ValidationMeasure` now carries a `poste_status_id` FK to `ValidationPosteStatus` (added in `V5.0__measure_poste_status_link.sql`). This scopes each measure explicitly to one poste of the line ticket.
+
+**New controller:** `PosteValidationController` at `/api/validations/{validationId}/postes/{zoneId}`:
+- `GET /measures` — measures for a specific poste (empty list, not 404, when none exist)
+- `GET /readiness` — per-poste `WorkflowReadinessDTO`; `canTransition = true` when all mandatory measures for that poste are not `NOT_EXECUTED` (OUT_OF_RANGE measures are reported but do not block closure)
+
+**Ticket-level mutation endpoints deprecated** (`ValidationMeasureController`): `POST /measures`, `POST /measures/batch`, `POST /measures/from-template`, `POST /measures/from-template/{templateId}` are deprecated in favour of the per-poste paths. They still work but respond with `Deprecation: true` and `Sunset` headers (RFC 8594 draft) and log a `WARN` with the caller's `User-Agent`/`X-Requested-By` for migration tracking. The read endpoint (`GET /measures`) is not deprecated — it stays as the ticket-wide aggregate view.
+
+**New endpoint:** `PUT /api/validations/{validationId}/measures/batch` (`BatchUpdateMeasureRequest`) — bulk-update `measuredValue` on existing rows. Returns `BatchValidationMeasureResponse` with per-row `status: "ok"|"error"` so the UI can highlight failing rows without rejecting the whole batch (frontend "Édition groupée → Enregistrer tout" flow).
+
+**Measure-to-poste resolution strategy** in `ValidationMeasureServiceImpl`:
+- Mode A: explicit `templateId` → match poste whose `zone.posteType` = `template.posteType`
+- Mode B: `measureCode` → walk every poste of the line, use first catalog hit
+- Legacy fallback: for pre-migration tickets with no `posteStatuses`, falls back to `validationZone.posteType`
+
+**Idempotency**: `instantiateFromCatalog` is now line-wide — seeds every poste, not just the first. Per-poste deduplication uses `findCatalogTemplateIdsPresentOnPoste`. The uniqueness index `uq_vm_natural_key` was recreated to include `COALESCE(poste_status_id, -1)` so two postes can each have a measure with the same code (e.g. `TEMPS_TEST`).
 
 ## WebSocket
 

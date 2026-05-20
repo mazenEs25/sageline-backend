@@ -20,6 +20,9 @@ public class ValidationMapper {
     @Autowired
     private ValidationAssignmentMapper assignmentMapper;
 
+    @Autowired
+    private com.pfe.sageline.repository.ValidationMeasureRepository measureRepository;
+
     /**
      * Build a line-level ticket entity. {@code line} is the canonical owner of
      * the ticket (mandatory since 2026-04). {@code primaryZone} is the poste we
@@ -71,9 +74,8 @@ public class ValidationMapper {
         // AI prediction
         NonConformityPrediction prediction = entity.getPrediction();
 
-        // Group results by poste (zoneId) so we can attach per-poste counters.
-        // Building this here keeps the N+1 risk inside the already-loaded
-        // collection and avoids an extra query per poste row.
+        // Group legacy results by poste (zoneId) for back-compat with
+        // tickets that still use the old validation_results table.
         Map<Long, long[]> resultsByZone = new HashMap<>();
         if (entity.getValidationResults() != null) {
             for (ValidationResult r : entity.getValidationResults()) {
@@ -83,6 +85,17 @@ public class ValidationMapper {
                 counters[0]++; // total
                 if (Boolean.FALSE.equals(r.getConform())) counters[1]++; // non-conform
             }
+        }
+
+        // Per-poste measure counts from validation_measures (the new table).
+        // Maps posteStatusId → [totalMeasures, outOfRangeMeasures].
+        Map<Long, long[]> measuresByPosteStatusId = new HashMap<>();
+        List<Object[]> measureCounts = measureRepository.countMeasuresByPosteStatus(entity.getId());
+        for (Object[] row : measureCounts) {
+            Long psId = (Long) row[0];
+            long total = (Long) row[1];
+            long oor = (Long) row[2];
+            measuresByPosteStatusId.put(psId, new long[]{total, oor});
         }
 
         // Per-poste sub-statuses — ordered by orderInLine, nulls last
@@ -97,11 +110,19 @@ public class ValidationMapper {
                             Comparator.nullsLast(Comparator.naturalOrder())))
                     .map(p -> {
                         PosteStatusDTO d = toPosteStatusDTO(p);
-                        if (d != null && d.getZoneId() != null) {
-                            long[] c = resultsByZone.getOrDefault(
-                                    d.getZoneId(), new long[]{0L, 0L});
-                            d.setResultsCount(c[0]);
-                            d.setNonConformCount(c[1]);
+                        if (d != null) {
+                            // Prefer counts from the new validation_measures table.
+                            long[] mc = measuresByPosteStatusId.getOrDefault(p.getId(), null);
+                            if (mc != null) {
+                                d.setResultsCount(mc[0]);
+                                d.setNonConformCount(mc[1]);
+                            } else if (d.getZoneId() != null) {
+                                // Fallback to legacy validation_results counts.
+                                long[] c = resultsByZone.getOrDefault(
+                                        d.getZoneId(), new long[]{0L, 0L});
+                                d.setResultsCount(c[0]);
+                                d.setNonConformCount(c[1]);
+                            }
                         }
                         return d;
                     })

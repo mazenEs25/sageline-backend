@@ -29,6 +29,16 @@ public class ValidationMeasure {
     @JoinColumn(name = "validation_id", nullable = false)
     private Validation validation;
 
+    /**
+     * The specific poste of the line this measure was recorded for.
+     * Added in V5.0 schema migration — nullable for back-compat with rows whose
+     * backfill couldn't resolve a poste (legacy ad-hoc with no validation_zone_id).
+     * New writes should always set this; reads can filter the orphan rows out.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "poste_status_id")
+    private ValidationPosteStatus posteStatus;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "catalog_template_id")
     private PosteMeasureCatalog catalogTemplate;

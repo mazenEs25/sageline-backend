@@ -55,6 +55,7 @@ public class ValidationMeasureMapper {
         return new ValidationMeasureResponse(
                 entity.getId(),
                 entity.getValidation().getId(),
+                entity.getPosteStatus() != null ? entity.getPosteStatus().getId() : null,
                 entity.getCatalogTemplate() != null ? entity.getCatalogTemplate().getId() : null,
                 entity.getMeasureCode(),
                 entity.getMeasureLabel(),

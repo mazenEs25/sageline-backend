@@ -54,7 +54,20 @@ public class PosteCatalogServiceImpl implements PosteCatalogService {
 
     @Override
     public List<PosteMeasureCatalogResponse> getMeasuresByPosteType(PosteType posteType) {
-        List<PosteMeasureCatalog> entities = repository.findByPosteTypeAndActiveOrderByDisplayOrder(posteType, true);
+        return getMeasuresByPosteType(posteType, false);
+    }
+
+    /**
+     * Variant that honors the {@code includeInactive} flag the frontend
+     * PosteCatalogService.getMeasuresByPosteType passes through. Without this overload,
+     * the query param was silently ignored — soft-deleted templates were invisible
+     * even when the admin page explicitly asked for them.
+     */
+    @Override
+    public List<PosteMeasureCatalogResponse> getMeasuresByPosteType(PosteType posteType, boolean includeInactive) {
+        List<PosteMeasureCatalog> entities = includeInactive
+                ? repository.findByPosteTypeOrderByDisplayOrder(posteType)
+                : repository.findByPosteTypeAndActiveOrderByDisplayOrder(posteType, true);
         return mapper.toResponseList(entities);
     }
 

@@ -45,6 +45,8 @@ public class ValidationService {
     private final SimpMessagingTemplate messagingTemplate;
     private final HandoverService handoverService;
     private final com.pfe.sageline.Config.SecurityUtils securityUtils;
+    private final com.pfe.sageline.service.workflow.WorkflowReadinessService workflowReadinessService;
+    private final com.pfe.sageline.repository.ValidationMeasureRepository validationMeasureRepository;
 
     // ========================
     // CRUD
@@ -516,13 +518,16 @@ public class ValidationService {
         }
 
         // Data-quality guard: a line can only be declared CONFORME if at least
-        // one measurement was actually recorded for the ticket. ValidationResult
-        // rows are ticket-scoped (no zone FK), so we check at the ticket level.
+        // one measurement was actually recorded for the ticket. We check BOTH
+        // the legacy validation_results table AND the new validation_measures
+        // table so that tickets using either system can be closed.
         // NON_CONFORME closures are still allowed without results — a line can
         // be rejected because no measurements could be taken.
         if (finalStatus == TicketStatus.CONFORME) {
-            int resultsCount = validationResultRepository.findByValidationId(id).size();
-            if (resultsCount == 0) {
+            int legacyResultsCount = validationResultRepository.findByValidationId(id).size();
+            int measuresCount = validationMeasureRepository
+                    .findAllByValidationIdFetchTemplate(id).size();
+            if (legacyResultsCount == 0 && measuresCount == 0) {
                 throw new ValidationException(
                         "Impossible de clôturer le ticket " + validation.getTicketCode() +
                         " en CONFORME sans aucune mesure enregistrée. " +
@@ -591,15 +596,23 @@ public class ValidationService {
                     " (attendu: EN_COURS ou EN_REVUE)");
         }
 
+        // "AUTO" is the sentinel asking the service to derive the verdict from the
+        // poste's measure statuses (default behaviour for the new Clôturer button).
+        // Parse to a real TicketStatus only for explicit caller-supplied verdicts.
         TicketStatus finalStatus;
-        try {
-            finalStatus = TicketStatus.valueOf(finalStatusRaw);
-        } catch (IllegalArgumentException e) {
-            throw new ValidationException("Statut invalide: " + finalStatusRaw);
-        }
-        if (finalStatus != TicketStatus.CONFORME && finalStatus != TicketStatus.NON_CONFORME) {
-            throw new ValidationException(
-                    "Le statut final d'un poste doit être CONFORME ou NON_CONFORME");
+        boolean autoVerdict = "AUTO".equalsIgnoreCase(finalStatusRaw);
+        if (autoVerdict) {
+            finalStatus = null; // resolved below, after measure checks
+        } else {
+            try {
+                finalStatus = TicketStatus.valueOf(finalStatusRaw);
+            } catch (IllegalArgumentException e) {
+                throw new ValidationException("Statut invalide: " + finalStatusRaw);
+            }
+            if (finalStatus != TicketStatus.CONFORME && finalStatus != TicketStatus.NON_CONFORME) {
+                throw new ValidationException(
+                        "Le statut final d'un poste doit être CONFORME, NON_CONFORME ou AUTO");
+            }
         }
 
         ValidationPosteStatus row = posteStatusRepository
@@ -612,6 +625,29 @@ public class ValidationService {
             throw new ValidationException(
                     "Le poste " + (row.getZone() != null ? row.getZone().getName() : zoneId) +
                     " est déjà clôturé (" + row.getStatus() + ")");
+        }
+
+        // ── Per-poste measure verification (added Phase B) ─────────────────
+        // Before accepting the verdict, refuse to close a poste while any of its
+        // mandatory measures is still NOT_EXECUTED. OUT_OF_RANGE measures are
+        // allowed — they steer the verdict to NON_CONFORME but don't block.
+        long mandatoryMissing = validationMeasureRepository
+                .missingMandatoryMeasuresOnPoste(row.getId()).size();
+        if (mandatoryMissing > 0) {
+            throw new ValidationException(
+                    "Impossible de clôturer le poste " +
+                    (row.getZone() != null ? row.getZone().getName() : zoneId) +
+                    " : " + mandatoryMissing +
+                    " mesure(s) obligatoire(s) encore NOT_EXECUTED. " +
+                    "Saisissez ou importez les valeurs manquantes avant de clôturer.");
+        }
+
+        // Resolve AUTO verdict from measure statuses now that mandatory measures
+        // are confirmed filled: every measure OK → CONFORME, else NON_CONFORME.
+        if (autoVerdict) {
+            long outOfRange = validationMeasureRepository
+                    .outOfRangeMeasuresOnPoste(row.getId()).size();
+            finalStatus = (outOfRange == 0) ? TicketStatus.CONFORME : TicketStatus.NON_CONFORME;
         }
 
         User actor = userRepository.findById(actingUserId)
